@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, addDoc, onSnapshot, collection, query, where } from 'firebase/firestore';
-import { Archive, FlaskConical, GlassWater, NotebookPen, Home, Plus, Trash2, Mic, MicOff, LoaderCircle, List, Sprout, ChevronLeft, ChevronRight, FileDown } from 'lucide-react';
+import { Archive, FlaskConical, GlassWater, NotebookPen, Home, Plus, Trash2, Mic, MicOff, LoaderCircle, List, Sprout, ChevronLeft, ChevronRight, FileDown, LogIn, LogOut, UserPlus } from 'lucide-react';
 
 // Tailwind CSS classes for consistent styling
 const tailwind = `
@@ -47,16 +47,6 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// Function to handle user sign-in (anonymous for simplicity, but can be expanded)
-const signIn = async () => {
-  try {
-    // In a deployed app, we use anonymous sign-in for simplicity.
-    await signInAnonymously(auth);
-  } catch (error) {
-    console.error("Firebase Auth Error:", error);
-  }
-};
-
 // Main App component
 export default function App() {
   // State variables for authentication and data
@@ -70,7 +60,6 @@ export default function App() {
   const [combinedLogs, setCombinedLogs] = useState([]);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState("");
-  // Use projectId as appId for Firestore paths, as it's unique to your Firebase project.
   const appId = firebaseConfig.projectId; 
   
   // Pagination state
@@ -115,7 +104,7 @@ export default function App() {
     boxesUsed: '',
     lotNumber: '',
     notes: '',
-    bottlingMaterialDefinition: '', // New field to link to the definition
+    bottlingMaterialDefinition: '', 
   });
   
   const [bottlingMaterialDefinitions, setBottlingMaterialDefinitions] = useState([]);
@@ -139,20 +128,25 @@ export default function App() {
     ingredients: [{ name: '', quantity: '', unit: '' }],
   });
 
+  // State for Login/Registration
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [authError, setAuthError] = useState('');
 
-  // Effect for Firebase authentication
+
+  // Effect for Firebase authentication state changes
   useEffect(() => {
-    signIn();
-
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsAuthReady(true);
+      setAuthError(''); // Clear any previous auth errors on state change
     });
 
     return () => unsubscribeAuth();
   }, []);
 
-  // Effect for setting up Firestore listeners after authentication
+  // Effect for setting up Firestore listeners AFTER authentication is ready and user is logged in
   useEffect(() => {
     if (user && isAuthReady) {
       console.log("Setting up Firestore listeners for user:", user.uid);
@@ -202,6 +196,14 @@ export default function App() {
         unsubscribeDistillation();
         unsubscribeBottling();
       };
+    } else if (isAuthReady && !user) {
+      // If auth is ready but no user, clear data (user logged out or not logged in)
+      setInventory([]);
+      setRecipes([]);
+      setDistillationLogs([]);
+      setBottlingLogs([]);
+      setCombinedLogs([]);
+      setBottlingMaterialDefinitions([]);
     }
   }, [user, isAuthReady, appId]);
   
@@ -217,6 +219,39 @@ export default function App() {
     setNotificationMessage(message);
     setShowNotificationModal(true);
   };
+
+  // --- Authentication Handlers ---
+  const handleAuthAction = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      if (isRegistering) {
+        await createUserWithEmailAndPassword(auth, loginEmail, loginPassword);
+        showNotification("Registration successful! You are now logged in.");
+      } else {
+        await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+        showNotification("Login successful!");
+      }
+      setLoginEmail('');
+      setLoginPassword('');
+    } catch (error) {
+      console.error("Auth Error:", error);
+      setAuthError(error.message);
+      showNotification(`Authentication failed: ${error.message}`);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      showNotification("Logged out successfully.");
+      setView('dashboard'); // Redirect to dashboard or login page after logout
+    } catch (error) {
+      console.error("Logout Error:", error);
+      showNotification(`Logout failed: ${error.message}`);
+    }
+  };
+  // --- End Authentication Handlers ---
   
   // AI Voice Dictation Feature for Distillation
   const startDistillationListening = () => {
@@ -430,7 +465,7 @@ export default function App() {
                     bottledAmount: { type: "NUMBER" },
                     boxesUsed: { type: "NUMBER" },
                     lotNumber: { type: "STRING" },
-                                        notes: { type: "STRING" },
+                    notes: { type: "STRING" },
                 },
             }
         }
@@ -683,63 +718,89 @@ export default function App() {
     }
   };
 
-  return (
-    <div className={tailwind}>
-      <header className="w-full max-w-4xl mb-8">
-        <nav className="flex bg-[#E0D8D0] rounded-2xl p-2 shadow-xl">
-          <button onClick={() => setView('dashboard')} className={`${tabButton} ${view === 'dashboard' ? activeTab : inactiveTab}`}>
-            <Home size={20} className={`inline mr-2 ${view === 'dashboard' ? 'text-[#F4EFEA]' : 'text-[#8A2A2B]'}`} />Dashboard
-          </button>
-          <button onClick={() => setView('distillation')} className={`${tabButton} ${view === 'distillation' ? activeTab : inactiveTab}`}>
-            <FlaskConical size={20} className={`inline mr-2 ${view === 'distillation' ? 'text-[#F4EFEA]' : 'text-[#8A2A2B]'}`} />Distillation
-          </button>
-          <button onClick={() => setView('bottling')} className={`${tabButton} ${view === 'bottling' ? activeTab : inactiveTab}`}>
-            <GlassWater size={20} className={`inline mr-2 ${view === 'bottling' ? 'text-[#F4EFEA]' : 'text-[#8A2A2B]'}`} />Bottling
-          </button>
-          <button onClick={() => setView('logs')} className={`${tabButton} ${view === 'logs' ? activeTab : inactiveTab}`}>
-            <List size={20} className={`inline mr-2 ${view === 'logs' ? 'text-[#F4EFEA]' : 'text-[#8A2A2B]'}`} />Logs
-          </button>
-          <button onClick={() => setView('inventory')} className={`${tabButton} ${view === 'inventory' ? activeTab : inactiveTab}`}>
-            <Archive size={20} className={`inline mr-2 ${view === 'inventory' ? 'text-[#F4EFEA]' : 'text-[#8A2A2B]'}`} />Inventory
-          </button>
-        </nav>
-      </header>
-      
-      <main className="w-full max-w-4xl">
-        {isAuthReady ? (
-          <>
-            {view === 'dashboard' && (
-              <>
-                <div className={`${card} text-center`}>
-                  <h1 className="text-4xl font-extrabold mb-4 text-[#8A2A2B]">Distillery Dashboard</h1>
-                  <p className="text-lg text-[#4E3629] mb-6">Track your production logs and inventory in real-time.</p>
-                  <div className="flex justify-center items-center">
-                    <div className="p-4 bg-[#8A2A2B] rounded-xl m-2 shadow-lg">
-                      <p className="text-xl font-semibold text-[#F4EFEA]">{distillationLogs.length}</p>
-                      <p className="text-sm text-[#F4EFEA]">Distillation Logs</p>
-                    </div>
-                    <div className="p-4 bg-[#8A2A2B] rounded-xl m-2 shadow-lg">
-                      <p className="text-xl font-semibold text-[#F4EFEA]">{bottlingLogs.length}</p>
-                      <p className="text-sm text-[#F4EFEA]">Bottling Logs</p>
-                    </div>
-                    <div className="p-4 bg-[#8A2A2B] rounded-xl m-2 shadow-lg">
-                      <p className="text-xl font-semibold text-[#F4EFEA]">{inventory.length}</p>
-                      <p className="text-sm text-[#F4EFEA]">Inventory Items</p>
-                    </div>
-                  </div>
-                </div>
+  // UI rendering based on current view
+  const renderViewContent = () => {
+    const lowStockItems = inventory.filter(item => item.quantity <= item.lowStockThreshold);
 
-                <div className={card}>
-                  <h2 className="text-2xl font-bold mb-4 flex items-center">
-                    <Archive size={24} className="mr-2 text-[#8A2A2B]" /> Inventory Overview
-                  </h2>
-                  {inventory.filter(item => item.quantity <= item.lowStockThreshold).length > 0 ? (
-                    <>
-                      <div className={notificationBox}>
-                        <p className="font-bold">Urgent: Low Stock!</p>
-                        <p>The following items are running low. Re-order to avoid production halts.</p>
-                      </div>
-                      {inventory.filter(item => item.quantity <= item.lowStockThreshold).map(item => (
+    // Pagination logic for combined logs
+    const totalPages = Math.ceil(combinedLogs.length / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const currentLogs = combinedLogs.slice(startIndex, endIndex);
+
+    const handlePageChange = (page) => {
+      setCurrentPage(page);
+    };
+
+    const renderPagination = () => {
+      if (totalPages <= 1) return null;
+      const pages = [];
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(
+          <button
+            key={i}
+            onClick={() => handlePageChange(i)}
+            className={`${paginationButton} ${currentPage === i ? activePageButton : ''}`}
+          >
+            {i}
+          </button>
+        );
+      }
+      return (
+        <div className="flex justify-center items-center mt-4">
+          <button
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+            className={`${paginationButton} ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            <ChevronLeft size={16} />
+          </button>
+          {pages}
+          <button
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={currentPage === totalPages}
+            className={`${paginationButton} ${currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      );
+    };
+
+    switch (view) {
+      case 'dashboard':
+        return (
+          <>
+            <div className={`${card} text-center`}>
+              <h1 className="text-4xl font-extrabold mb-4 text-[#8A2A2B]">Distillery Dashboard</h1>
+              <p className="text-lg text-[#4E3629] mb-6">Track your production logs and inventory in real-time.</p>
+              <div className="flex justify-center items-center">
+                <div className="p-4 bg-[#8A2A2B] rounded-xl m-2 shadow-lg">
+                  <p className="text-xl font-semibold text-[#F4EFEA]">{distillationLogs.length}</p>
+                  <p className="text-sm text-[#F4EFEA]">Distillation Logs</p>
+                </div>
+                <div className="p-4 bg-[#8A2A2B] rounded-xl m-2 shadow-lg">
+                  <p className="text-xl font-semibold text-[#F4EFEA]">{bottlingLogs.length}</p>
+                  <p className="text-sm text-[#F4EFEA]">Bottling Logs</p>
+                </div>
+                <div className="p-4 bg-[#8A2A2B] rounded-xl m-2 shadow-lg">
+                  <p className="text-xl font-semibold text-[#F4EFEA]">{inventory.length}</p>
+                  <p className="text-sm text-[#F4EFEA]">Inventory Items</p>
+                </div>
+              </div>
+            </div>
+
+            <div className={card}>
+              <h2 className="text-2xl font-bold mb-4 flex items-center">
+                <Archive size={24} className="mr-2 text-[#8A2A2B]" /> Inventory Overview
+              </h2>
+              {inventory.filter(item => item.quantity <= item.lowStockThreshold).length > 0 ? (
+                <>
+                  <div className={notificationBox}>
+                    <p className="font-bold">Urgent: Low Stock!</p>
+                    <p>The following items are running low. Re-order to avoid production halts.</p>
+                  </div>
+                  {inventory.filter(item => item.quantity <= item.lowStockThreshold).map(item => (
                         <div key={item.id} className={lowStockItem}>
                           <span className="font-bold">{item.name}</span>
                           <span>
@@ -1171,7 +1232,7 @@ export default function App() {
                     ))}
                     <div className="flex flex-col space-y-4 items-start">
                       <button type="button" onClick={() => setRecipeForm({ ...recipeForm, ingredients: [...recipeForm.ingredients, { name: '', quantity: '', unit: '' }] })} className="text-[#8A2A2B] hover:text-[#6D2121]">
-                        + Add Another Material
+                        + Add Another Ingredient
                       </button>
                       <button type="submit" className={button}>Add Recipe</button>
                     </div>
@@ -1220,8 +1281,51 @@ export default function App() {
           </>
         ) : (
           <div className={`${card} text-center`}>
-            <p className="text-xl text-[#4E3629]">Loading application...</p>
-            <p className="text-sm text-[#4E3629] mt-2">Authenticated user ID: {user?.uid}</p>
+            {/* Login/Registration Form */}
+            <h2 className="text-2xl font-bold mb-6 text-[#8A2A2B]">
+              {isRegistering ? 'Register' : 'Login'} to Distillery App
+            </h2>
+            <form onSubmit={handleAuthAction} className="space-y-4">
+              <div>
+                <label className="block text-[#4E3629] mb-2">Email</label>
+                <input
+                  type="email"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  required
+                  className={inputField}
+                  placeholder="Enter your email"
+                />
+              </div>
+              <div>
+                <label className="block text-[#4E3629] mb-2">Password</label>
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  required
+                  className={inputField}
+                  placeholder="Enter your password"
+                />
+              </div>
+              {authError && <p className="text-red-500 text-sm">{authError}</p>}
+              <div className="flex justify-between items-center">
+                <button type="submit" className={button}>
+                  {isRegistering ? (
+                    <><UserPlus size={20} className="inline mr-2" /> Register</>
+                  ) : (
+                    <><LogIn size={20} className="inline mr-2" /> Login</>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsRegistering(!isRegistering)}
+                  className="text-[#4E3629] hover:text-[#8A2A2B] text-sm"
+                >
+                  {isRegistering ? 'Already have an account? Login' : 'Need an account? Register'}
+                </button>
+              </div>
+            </form>
           </div>
         )}
       </main>

@@ -1,4 +1,9 @@
 [build]
   publish = "build"
-  command = "npm run build"
-  base = "/"
+  command = "CI= npm run build" # Added CI= to explicitly disable CI behavior
+
+[build.environment]
+  # This explicitly tells create-react-app the base URL for asset paths
+  # It should match your site's root URL on Netlify.
+  # Use the actual URL Netlify gives you, e.g., "https://your-site-name.netlify.app/"
+  PUBLIC_URL = "https://eclectic-pavlova-4e8e10.netlify.app/"

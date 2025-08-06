@@ -31,15 +31,15 @@ const activePageButton = `bg-[#8A2A2B] text-[#F4EFEA]`;
 const timeInput = `bg-[#C8C2BA] text-[#4E3629] p-3 rounded-xl w-full focus:outline-none focus:ring-2 focus:ring-[#8A2A2B]`;
 
 
-// Firebase initialization (IMPORTANT: You MUST replace these placeholder values with your actual Firebase project config)
+// Firebase initialization: IMPORTANT - REPLACE THESE PLACEHOLDER VALUES WITH YOUR ACTUAL FIREBASE PROJECT CONFIG.
 // You can find these values in your Firebase project settings under "Project settings" -> "Your apps" -> "Web app"
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY", 
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "YOUR_API_KEY", 
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "YOUR_AUTH_DOMAIN",
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "YOUR_PROJECT_ID",
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || "YOUR_STORAGE_BUCKET",
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "YOUR_MESSAGING_SENDER_ID",
+  appId: process.env.REACT_APP_FIREBASE_APP_ID || "YOUR_APP_ID"
 };
 
 // Initialize Firebase app
@@ -50,8 +50,7 @@ const auth = getAuth(app);
 // Function to handle user sign-in (anonymous for simplicity, but can be expanded)
 const signIn = async () => {
   try {
-    // In a deployed app, you'd typically handle user authentication (e.g., email/password, Google Sign-In)
-    // For this app, we'll use anonymous sign-in for simplicity.
+    // In a deployed app, we use anonymous sign-in for simplicity.
     await signInAnonymously(auth);
   } catch (error) {
     console.error("Firebase Auth Error:", error);
@@ -431,7 +430,7 @@ export default function App() {
                     bottledAmount: { type: "NUMBER" },
                     boxesUsed: { type: "NUMBER" },
                     lotNumber: { type: "STRING" },
-                    notes: { type: "STRING" },
+                                        notes: { type: "STRING" },
                 },
             }
         }
@@ -1172,7 +1171,7 @@ export default function App() {
                     ))}
                     <div className="flex flex-col space-y-4 items-start">
                       <button type="button" onClick={() => setRecipeForm({ ...recipeForm, ingredients: [...recipeForm.ingredients, { name: '', quantity: '', unit: '' }] })} className="text-[#8A2A2B] hover:text-[#6D2121]">
-                        + Add Another Ingredient
+                        + Add Another Material
                       </button>
                       <button type="submit" className={button}>Add Recipe</button>
                     </div>

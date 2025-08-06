@@ -1,7 +1,8 @@
 {
   "name": "distillery-log-app",
   "version": "0.1.0",
-  "private": true,
+"private": true,
+  "homepage": "https://689359a0e73a7c04aa610da6--eclectic-pavlova-4e8e10.netlify.app/",
   "dependencies": {
     "firebase": "^9.6.1",
     "html2pdf.js": "^0.10.1",

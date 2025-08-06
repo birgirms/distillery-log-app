@@ -47,6 +47,16 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
+// Function to handle user sign-in (anonymous for simplicity, but can be expanded)
+const signIn = async () => {
+  try {
+    // In a deployed app, we use anonymous sign-in for simplicity.
+    await signInAnonymously(auth);
+  } catch (error) {
+    console.error("Firebase Auth Error:", error);
+  }
+};
+
 // Main App component
 export default function App() {
   // State variables for authentication and data
@@ -60,6 +70,7 @@ export default function App() {
   const [combinedLogs, setCombinedLogs] = useState([]);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState("");
+  // Use projectId as appId for Firestore paths, as it's unique to your Firebase project.
   const appId = firebaseConfig.projectId; 
   
   // Pagination state
@@ -718,89 +729,68 @@ export default function App() {
     }
   };
 
-  // UI rendering based on current view
-  const renderViewContent = () => {
-    const lowStockItems = inventory.filter(item => item.quantity <= item.lowStockThreshold);
-
-    // Pagination logic for combined logs
-    const totalPages = Math.ceil(combinedLogs.length / itemsPerPage);
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const currentLogs = combinedLogs.slice(startIndex, endIndex);
-
-    const handlePageChange = (page) => {
-      setCurrentPage(page);
-    };
-
-    const renderPagination = () => {
-      if (totalPages <= 1) return null;
-      const pages = [];
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(
-          <button
-            key={i}
-            onClick={() => handlePageChange(i)}
-            className={`${paginationButton} ${currentPage === i ? activePageButton : ''}`}
-          >
-            {i}
+  return (
+    <div className={tailwind}>
+      <header className="w-full max-w-4xl mb-8">
+        <nav className="flex bg-[#E0D8D0] rounded-2xl p-2 shadow-xl">
+          <button onClick={() => setView('dashboard')} className={`${tabButton} ${user ? (view === 'dashboard' ? activeTab : inactiveTab) : inactiveTab}`}>
+            <Home size={20} className={`inline mr-2 ${user ? (view === 'dashboard' ? 'text-[#F4EFEA]' : 'text-[#8A2A2B]') : 'text-[#8A2A2B]'}`} />Dashboard
           </button>
-        );
-      }
-      return (
-        <div className="flex justify-center items-center mt-4">
-          <button
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
-            className={`${paginationButton} ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            <ChevronLeft size={16} />
+          <button onClick={() => setView('distillation')} className={`${tabButton} ${user ? (view === 'distillation' ? activeTab : inactiveTab) : inactiveTab}`}>
+            <FlaskConical size={20} className={`inline mr-2 ${user ? (view === 'distillation' ? 'text-[#F4EFEA]' : 'text-[#8A2A2B]') : 'text-[#8A2A2B]'}`} />Distillation
           </button>
-          {pages}
-          <button
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
-            className={`${paginationButton} ${currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            <ChevronRight size={16} />
+          <button onClick={() => setView('bottling')} className={`${tabButton} ${user ? (view === 'bottling' ? activeTab : inactiveTab) : inactiveTab}`}>
+            <GlassWater size={20} className={`inline mr-2 ${user ? (view === 'bottling' ? 'text-[#F4EFEA]' : 'text-[#8A2A2B]') : 'text-[#8A2A2B]'}`} />Bottling
           </button>
-        </div>
-      );
-    };
-
-    switch (view) {
-      case 'dashboard':
-        return (
+          <button onClick={() => setView('logs')} className={`${tabButton} ${user ? (view === 'logs' ? activeTab : inactiveTab) : inactiveTab}`}>
+            <List size={20} className={`inline mr-2 ${user ? (view === 'logs' ? 'text-[#F4EFEA]' : 'text-[#8A2A2B]') : 'text-[#8A2A2B]'}`} />Logs
+          </button>
+          <button onClick={() => setView('inventory')} className={`${tabButton} ${user ? (view === 'inventory' ? activeTab : inactiveTab) : inactiveTab}`}>
+            <Archive size={20} className={`inline mr-2 ${user ? (view === 'inventory' ? 'text-[#F4EFEA]' : 'text-[#8A2A2B]') : 'text-[#8A2A2B]'}`} />Inventory
+          </button>
+          {user && (
+            <button onClick={handleLogout} className={`${tabButton} bg-red-600 hover:bg-red-700 text-white`}>
+              <LogOut size={20} className="inline mr-2" /> Logout
+            </button>
+          )}
+        </nav>
+      </header>
+      
+      <main className="w-full max-w-4xl">
+        {isAuthReady && user ? ( // Render app content only if authenticated
           <>
-            <div className={`${card} text-center`}>
-              <h1 className="text-4xl font-extrabold mb-4 text-[#8A2A2B]">Distillery Dashboard</h1>
-              <p className="text-lg text-[#4E3629] mb-6">Track your production logs and inventory in real-time.</p>
-              <div className="flex justify-center items-center">
-                <div className="p-4 bg-[#8A2A2B] rounded-xl m-2 shadow-lg">
-                  <p className="text-xl font-semibold text-[#F4EFEA]">{distillationLogs.length}</p>
-                  <p className="text-sm text-[#F4EFEA]">Distillation Logs</p>
-                </div>
-                <div className="p-4 bg-[#8A2A2B] rounded-xl m-2 shadow-lg">
-                  <p className="text-xl font-semibold text-[#F4EFEA]">{bottlingLogs.length}</p>
-                  <p className="text-sm text-[#F4EFEA]">Bottling Logs</p>
-                </div>
-                <div className="p-4 bg-[#8A2A2B] rounded-xl m-2 shadow-lg">
-                  <p className="text-xl font-semibold text-[#F4EFEA]">{inventory.length}</p>
-                  <p className="text-sm text-[#F4EFEA]">Inventory Items</p>
-                </div>
-              </div>
-            </div>
-
-            <div className={card}>
-              <h2 className="text-2xl font-bold mb-4 flex items-center">
-                <Archive size={24} className="mr-2 text-[#8A2A2B]" /> Inventory Overview
-              </h2>
-              {inventory.filter(item => item.quantity <= item.lowStockThreshold).length > 0 ? (
-                <>
-                  <div className={notificationBox}>
-                    <p className="font-bold">Urgent: Low Stock!</p>
-                    <p>The following items are running low. Re-order to avoid production halts.</p>
+            {view === 'dashboard' && (
+              <>
+                <div className={`${card} text-center`}>
+                  <h1 className="text-4xl font-extrabold mb-4 text-[#8A2A2B]">Distillery Dashboard</h1>
+                  <p className="text-lg text-[#4E3629] mb-6">Track your production logs and inventory in real-time.</p>
+                  <div className="flex justify-center items-center">
+                    <div className="p-4 bg-[#8A2A2B] rounded-xl m-2 shadow-lg">
+                      <p className="text-xl font-semibold text-[#F4EFEA]">{distillationLogs.length}</p>
+                      <p className="text-sm text-[#F4EFEA]">Distillation Logs</p>
+                    </div>
+                    <div className="p-4 bg-[#8A2A2B] rounded-xl m-2 shadow-lg">
+                      <p className="text-xl font-semibold text-[#F4EFEA]">{bottlingLogs.length}</p>
+                      <p className="text-sm text-[#F4EFEA]">Bottling Logs</p>
+                    </div>
+                    <div className="p-4 bg-[#8A2A2B] rounded-xl m-2 shadow-lg">
+                      <p className="text-xl font-semibold text-[#F4EFEA]">{inventory.length}</p>
+                      <p className="text-sm text-[#F4EFEA]">Inventory Items</p>
+                    </div>
                   </div>
-                  {inventory.filter(item => item.quantity <= item.lowStockThreshold).map(item => (
+                </div>
+
+                <div className={card}>
+                  <h2 className="text-2xl font-bold mb-4 flex items-center">
+                    <Archive size={24} className="mr-2 text-[#8A2A2B]" /> Inventory Overview
+                  </h2>
+                  {inventory.filter(item => item.quantity <= item.lowStockThreshold).length > 0 ? (
+                    <>
+                      <div className={notificationBox}>
+                        <p className="font-bold">Urgent: Low Stock!</p>
+                        <p>The following items are running low. Re-order to avoid production halts.</p>
+                      </div>
+                      {inventory.filter(item => item.quantity <= item.lowStockThreshold).map(item => (
                         <div key={item.id} className={lowStockItem}>
                           <span className="font-bold">{item.name}</span>
                           <span>
@@ -831,7 +821,7 @@ export default function App() {
                     {isLoadingAIDistillation ? <LoaderCircle size={24} className={loadingSpinner} /> : isListeningDistillation ? <MicOff size={24} /> : <Mic size={24} />}
                   </button>
                 </h2>
-                <form onSubmit={handleDistillationSubmit} className="space-y-4">
+                <form onSubmit={handleDistillationSubmit} className="space-y-4}>
                   <div>
                     <label className="block text-[#4E3629] mb-2">Time of Distillation</label>
                     <input type="datetime-local" value={distillationForm.date} onChange={(e) => setDistillationForm({ ...distillationForm, date: e.target.value })} required className={inputField} />

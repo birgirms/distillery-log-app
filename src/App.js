@@ -821,7 +821,7 @@ export default function App() {
                     {isLoadingAIDistillation ? <LoaderCircle size={24} className={loadingSpinner} /> : isListeningDistillation ? <MicOff size={24} /> : <Mic size={24} />}
                   </button>
                 </h2>
-                <form onSubmit={handleDistillationSubmit} className="space-y-4}>
+                <form onSubmit={handleDistillationSubmit} className="space-y-4">
                   <div>
                     <label className="block text-[#4E3629] mb-2">Time of Distillation</label>
                     <input type="datetime-local" value={distillationForm.date} onChange={(e) => setDistillationForm({ ...distillationForm, date: e.target.value })} required className={inputField} />
@@ -1185,7 +1185,7 @@ export default function App() {
                   <h3 className="text-xl font-bold mb-4 flex items-center text-[#8A2A2B]">
                     <Plus size={20} className="mr-2" /> Add New Recipe
                   </h3>
-                  <form onSubmit={handleAddRecipe} className="space-y-4">
+                  <form onSubmit={handleAddRecipe} className="space-y-4}>
                     <input type="text" placeholder="Recipe Name" value={recipeForm.name} onChange={(e) => setRecipeForm({ ...recipeForm, name: e.target.value })} required className={inputField} />
                     <input type="text" placeholder="Final Product" value={recipeForm.product} onChange={(e) => setRecipeForm({ ...recipeForm, product: e.target.value })} required className={inputField} />
                     

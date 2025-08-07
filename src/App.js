@@ -1,8 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInAnonymously, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, addDoc, onSnapshot, collection, query, where } from 'firebase/firestore';
 import { Archive, FlaskConical, GlassWater, NotebookPen, Home, Plus, Trash2, Mic, MicOff, LoaderCircle, List, Sprout, ChevronLeft, ChevronRight, FileDown, LogIn, LogOut, UserPlus } from 'lucide-react';
+
+// Tailwind CSS classes for consistent styling
+const tailwind = `
+  bg-[#F4EFEA] text-[#4E3629] min-h-screen p-8 font-sans transition-all duration-300
+  flex flex-col items-center
+`;
+const card = `bg-[#E0D8D0] rounded-2xl shadow-xl p-6 mb-8 w-full max-w-4xl`;
+const inputField = `bg-[#C8C2BA] text-[#4E3629] p-3 rounded-xl w-full focus:outline-none focus:ring-2 focus:ring-[#8A2A2B] placeholder-[#4E3629]`;
+const button = `bg-[#4E3629] hover:bg-[#8A2A2B] text-[#F4EFEA] font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105`;
+const dangerButton = `bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-200 ease-in-out transform hover:de-react/dist/esm/lucide-react.js';
 
 // Tailwind CSS classes for consistent styling
 const tailwind = `
@@ -31,32 +41,25 @@ const activePageButton = `bg-[#8A2A2B] text-[#F4EFEA]`;
 const timeInput = `bg-[#C8C2BA] text-[#4E3629] p-3 rounded-xl w-full focus:outline-none focus:ring-2 focus:ring-[#8A2A2B]`;
 
 
-// Firebase initialization: Uses environment variables for deployment.
-// IMPORTANT: Ensure these REACT_APP_FIREBASE_... variables are set in Netlify!
-const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "", 
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "",
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "",
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || "",
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "",
-  appId: process.env.REACT_APP_FIREBASE_APP_ID || ""
-};
+// Firebase initialization: This configuration dynamically adapts based on the environment.
+// It checks for Canvas-provided config first, then falls back to hardcoded values for local/Netlify builds.
+// IMPORTANT: For Netlify deployment, you MUST replace the "YOUR_API_KEY_FALLBACK" etc. with your actual Firebase project config.
+// You can find these values in your Firebase project settings under "Project settings" -> "Your apps" -> "Web app"
+const firebaseConfig = typeof __firebase_config !== 'undefined'
+  ? JSON.parse(__firebase_config) // Use Canvas provided config if available
+  : { // Fallback for local development/Netlify
+      apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "YOUR_API_KEY_FALLBACK", 
+      authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "YOUR_AUTH_DOMAIN_FALLBACK",
+      projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "YOUR_PROJECT_ID_FALLBACK",
+      storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || "YOUR_STORAGE_BUCKET_FALLBACK",
+      messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "YOUR_MESSAGING_SENDER_ID_FALLBACK",
+      appId: process.env.REACT_APP_FIREBASE_APP_ID || "YOUR_APP_ID_FALLBACK"
+    };
 
 // Initialize Firebase app
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-
-// Function to handle user sign-in (anonymous for simplicity, but can be expanded)
-const signIn = async () => {
-  try {
-    // For a deployed app, we'll always use anonymous sign-in initially if no other method is used.
-    // This ensures Firestore listeners can attach even before an explicit login.
-    await signInAnonymously(auth);
-  } catch (error) {
-    console.error("Firebase Auth Error:", error);
-  }
-};
 
 // Main App component
 export default function App() {
@@ -141,11 +144,11 @@ export default function App() {
   });
 
   // State for Login/Registration
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false);
   const [authError, setAuthError] = useState('');
 
+  // IMPORTANT: Set your desired admin email here. Only this email will be allowed to log in.
+  // If this is empty, anyone with a Google account can log in.
+  const ADMIN_EMAIL = "birgir@thoran.is"; // <--- REPLACE WITH YOUR ACTUAL ADMIN EMAIL
 
   // Effect for Firebase authentication state changes
   useEffect(() => {
@@ -233,23 +236,25 @@ export default function App() {
   };
 
   // --- Authentication Handlers ---
-  const handleAuthAction = async (e) => {
-    e.preventDefault();
+  const handleGoogleSignIn = async () => {
     setAuthError('');
     try {
-      if (isRegistering) {
-        await createUserWithEmailAndPassword(auth, loginEmail, loginPassword);
-        showNotification("Registration successful! You are now logged in.");
-      } else {
-        await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
-        showNotification("Login successful!");
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      
+      // Implement single-user restriction here
+      if (ADMIN_EMAIL && result.user.email !== ADMIN_EMAIL) {
+        await signOut(auth); // Log out unauthorized user immediately
+        setAuthError("Access denied. This app is restricted to a specific user.");
+        showNotification("Access denied. This app is restricted to a specific user.");
+        return;
       }
-      setLoginEmail('');
-      setLoginPassword('');
+
+      showNotification(`Welcome, ${result.user.displayName || result.user.email}!`);
     } catch (error) {
-      console.error("Auth Error:", error);
+      console.error("Google Sign-In Error:", error);
       setAuthError(error.message);
-      showNotification(`Authentication failed: ${error.message}`);
+      showNotification(`Google Sign-In failed: ${error.message}`);
     }
   };
 
@@ -512,7 +517,7 @@ export default function App() {
         delay *= 2;
     }
     
-    setIsLoadingAIBottling(false);
+    setIsLoadingAIDistillation(false);
 
     if (jsonResult) {
       setBottlingForm(prevForm => {
@@ -937,8 +942,7 @@ export default function App() {
 
             {view === 'logs' && (
               <div className={card}>
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-bold flex items-center text-[#8A2A2B]">
+                <h2 className="text-2xl font-bold mb-6 flex items-center text-[#8A2A2B]">
                     <List size={24} className="mr-2 text-[#8A2A2B]" /> Production Log History
                   </h2>
                   <button onClick={exportLogsToPDF} className={`${button} flex items-center`}>
@@ -1121,9 +1125,7 @@ export default function App() {
                           <td className="py-3 px-4">{item.lowStockThreshold} {item.unit}</td>
                           <td className="py-3 px-4">{item.leadTimeDays}</td>
                           <td className="py-3 px-4">
-                            <button onClick={() => handleRemoveInventory(item.id)} className="text-[#8A2A2B] hover:text-red-600">
-                              <Trash2 size={20} />
-                            </button>
+                            <button onClick={() => handleRemoveInventory(item.id)} className="text-[#8A2A2B] hover:text-red-600" />
                           </td>
                         </tr>
                       ))}
@@ -1223,7 +1225,7 @@ export default function App() {
                     ))}
                     <div className="flex flex-col space-y-4 items-start">
                       <button type="button" onClick={() => setRecipeForm({ ...recipeForm, ingredients: [...recipeForm.ingredients, { name: '', quantity: '', unit: '' }] })} className="text-[#8A2A2B] hover:text-[#6D2121]">
-                        + Add Another Ingredient
+                        + Add Another Material
                       </button>
                       <button type="submit" className={button}>Add Recipe</button>
                     </div>
@@ -1274,49 +1276,12 @@ export default function App() {
           <div className={`${card} text-center`}>
             {/* Login/Registration Form */}
             <h2 className="text-2xl font-bold mb-6 text-[#8A2A2B]">
-              {isRegistering ? 'Register' : 'Login'} to Distillery App
+              Login to Distillery App
             </h2>
-            <form onSubmit={handleAuthAction} className="space-y-4">
-              <div>
-                <label className="block text-[#4E3629] mb-2">Email</label>
-                <input
-                  type="email"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  required
-                  className={inputField}
-                  placeholder="Enter your email"
-                />
-              </div>
-              <div>
-                <label className="block text-[#4E3629] mb-2">Password</label>
-                <input
-                  type="password"
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  required
-                  className={inputField}
-                  placeholder="Enter your password"
-                />
-              </div>
-              {authError && <p className="text-red-500 text-sm">{authError}</p>}
-              <div className="flex justify-between items-center">
-                <button type="submit" className={button}>
-                  {isRegistering ? (
-                    <><UserPlus size={20} className="inline mr-2" /> Register</>
-                  ) : (
-                    <><LogIn size={20} className="inline mr-2" /> Login</>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsRegistering(!isRegistering)}
-                  className="text-[#4E3629] hover:text-[#8A2A2B] text-sm"
-                >
-                  {isRegistering ? 'Already have an account? Login' : 'Need an account? Register'}
-                </button>
-              </div>
-            </form>
+            <button onClick={handleGoogleSignIn} className={`${button} flex items-center justify-center w-full`}>
+              Sign in with Google
+            </button>
+            {authError && <p className="text-red-500 text-sm mt-4">{authError}</p>}
           </div>
         )}
       </main>

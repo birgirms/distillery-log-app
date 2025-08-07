@@ -9,8 +9,29 @@
     content="Distillery Log and Inventory Management App"
   />
   <title>Distillery Log App</title>
-  <!-- html2pdf.js for PDF export (loaded directly here) -->
+  <!-- html2pdf.js for PDF export -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js"></script>
+
+  <!-- IMPORTANT: Shim for 'process' object for browser compatibility -->
+  <!-- This defines a basic 'process' object, preventing ReferenceError in browsers. -->
+  <!-- Values like REACT_APP_FIREBASE_... will still be replaced by Netlify's build. -->
+  <script>
+    if (typeof window.process === 'undefined') {
+      window.process = {
+        env: {
+          // Default NODE_ENV for browser environment
+          NODE_ENV: 'production'
+          // Other REACT_APP_FIREBASE_... variables will be injected here by Netlify's build
+        }
+      };
+    }
+  </script>
+
 </head>
 <body>
   <noscript>You need to enable JavaScript to run this app.</noscript>

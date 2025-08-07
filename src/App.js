@@ -4,57 +4,38 @@ import { getAuth, signInAnonymously, GoogleAuthProvider, signInWithPopup, signOu
 import { getFirestore, doc, setDoc, addDoc, onSnapshot, collection, query, where } from 'firebase/firestore';
 import { Archive, FlaskConical, GlassWater, NotebookPen, Home, Plus, Trash2, Mic, MicOff, LoaderCircle, List, Sprout, ChevronLeft, ChevronRight, FileDown, LogIn, LogOut, UserPlus } from 'lucide-react';
 
-// Tailwind CSS classes for consistent styling
-const tailwind = `
-  bg-[#F4EFEA] text-[#4E3629] min-h-screen p-8 font-sans transition-all duration-300
-  flex flex-col items-center
-`;
-const card = `bg-[#E0D8D0] rounded-2xl shadow-xl p-6 mb-8 w-full max-w-4xl`;
-const inputField = `bg-[#C8C2BA] text-[#4E3629] p-3 rounded-xl w-full focus:outline-none focus:ring-2 focus:ring-[#8A2A2B] placeholder-[#4E3629]`;
-const button = `bg-[#4E3629] hover:bg-[#8A2A2B] text-[#F4EFEA] font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105`;
-const dangerButton = `bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-200 ease-in-out transform hover:de-react/dist/esm/lucide-react.js';
-
-// Tailwind CSS classes for consistent styling
-const tailwind = `
-  bg-[#F4EFEA] text-[#4E3629] min-h-screen p-8 font-sans transition-all duration-300
-  flex flex-col items-center
-`;
-const card = `bg-[#E0D8D0] rounded-2xl shadow-xl p-6 mb-8 w-full max-w-4xl`;
-const inputField = `bg-[#C8C2BA] text-[#4E3629] p-3 rounded-xl w-full focus:outline-none focus:ring-2 focus:ring-[#8A2A2B] placeholder-[#4E3629]`;
-const button = `bg-[#4E3629] hover:bg-[#8A2A2B] text-[#F4EFEA] font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105`;
-const dangerButton = `bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105`;
-const tabButton = `p-4 flex-1 text-center rounded-xl transition-all duration-200`;
-const activeTab = `bg-[#8A2A2B] text-[#F4EFEA] shadow-lg`;
-const inactiveTab = `bg-[#E0D8D0] text-[#4E3629] hover:bg-[#C8C2BA]`;
-const notificationBox = `bg-red-700 text-white p-4 rounded-xl mb-4`;
-const lowStockItem = `flex justify-between items-center bg-[#C8C2BA] p-3 rounded-xl mb-2`;
-const micButton = `
-  bg-[#4E3629] hover:bg-[#8A2A2B] text-[#F4EFEA] font-bold p-3 rounded-full shadow-lg
-  transition-all duration-200 ease-in-out transform hover:scale-110 flex items-center justify-center
-`;
-const loadingSpinner = `animate-spin text-[#F4EFEA]`;
-const tableHeader = `bg-[#C8C2BA] text-left text-[#4E3629] font-semibold`;
-const tableRow = `border-t border-[#B5AE9F] hover:bg-[#C8C2BA] transition-colors`;
-const tableCell = `py-3 px-4 text-sm`;
-const paginationButton = `px-4 py-2 mx-1 rounded-full bg-[#C8C2BA] hover:bg-[#8A2A2B] hover:text-[#F4EFEA] text-[#4E3629]`;
-const activePageButton = `bg-[#8A2A2B] text-[#F4EFEA]`;
-const timeInput = `bg-[#C8C2BA] text-[#4E3629] p-3 rounded-xl w-full focus:outline-none focus:ring-2 focus:ring-[#8A2A2B]`;
+// Tailwind CSS classes for consistent styling - Changed to regular strings
+const tailwind = "bg-[#F4EFEA] text-[#4E3629] min-h-screen p-8 font-sans transition-all duration-300 flex flex-col items-center";
+const card = "bg-[#E0D8D0] rounded-2xl shadow-xl p-6 mb-8 w-full max-w-4xl";
+const inputField = "bg-[#C8C2BA] text-[#4E3629] p-3 rounded-xl w-full focus:outline-none focus:ring-2 focus:ring-[#8A2A2B] placeholder-[#4E3629]";
+const button = "bg-[#4E3629] hover:bg-[#8A2A2B] text-[#F4EFEA] font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105";
+const dangerButton = "bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105";
+const tabButton = "p-4 flex-1 text-center rounded-xl transition-all duration-200";
+const activeTab = "bg-[#8A2A2B] text-[#F4EFEA] shadow-lg";
+const inactiveTab = "bg-[#E0D8D0] text-[#4E3629] hover:bg-[#C8C2BA]";
+const notificationBox = "bg-red-700 text-white p-4 rounded-xl mb-4";
+const lowStockItem = "flex justify-between items-center bg-[#C8C2BA] p-3 rounded-xl mb-2";
+const micButton = "bg-[#4E3629] hover:bg-[#8A2A2B] text-[#F4EFEA] font-bold p-3 rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-110 flex items-center justify-center";
+const loadingSpinner = "animate-spin text-[#F4EFEA]";
+const tableHeader = "bg-[#C8C2BA] text-left text-[#4E3629] font-semibold";
+const tableRow = "border-t border-[#B5AE9F] hover:bg-[#C8C2BA] transition-colors";
+const tableCell = "py-3 px-4 text-sm";
+const paginationButton = "px-4 py-2 mx-1 rounded-full bg-[#C8C2BA] hover:bg-[#8A2A2B] hover:text-[#F4EFEA] text-[#4E3629]";
+const activePageButton = "bg-[#8A2A2B] text-[#F4EFEA]";
+const timeInput = "bg-[#C8C2BA] text-[#4E3629] p-3 rounded-xl w-full focus:outline-none focus:ring-2 focus:ring-[#8A2A2B]";
 
 
-// Firebase initialization: This configuration dynamically adapts based on the environment.
-// It checks for Canvas-provided config first, then falls back to hardcoded values for local/Netlify builds.
+// Firebase initialization: Uses environment variables for deployment.
 // IMPORTANT: For Netlify deployment, you MUST replace the "YOUR_API_KEY_FALLBACK" etc. with your actual Firebase project config.
 // You can find these values in your Firebase project settings under "Project settings" -> "Your apps" -> "Web app"
-const firebaseConfig = typeof __firebase_config !== 'undefined'
-  ? JSON.parse(__firebase_config) // Use Canvas provided config if available
-  : { // Fallback for local development/Netlify
-      apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "YOUR_API_KEY_FALLBACK", 
-      authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "YOUR_AUTH_DOMAIN_FALLBACK",
-      projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "YOUR_PROJECT_ID_FALLBACK",
-      storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || "YOUR_STORAGE_BUCKET_FALLBACK",
-      messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "YOUR_MESSAGING_SENDER_ID_FALLBACK",
-      appId: process.env.REACT_APP_FIREBASE_APP_ID || "YOUR_APP_ID_FALLBACK"
-    };
+const firebaseConfig = {
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "", 
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "",
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "",
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || "",
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "",
+  appId: process.env.REACT_APP_FIREBASE_APP_ID || ""
+};
 
 // Initialize Firebase app
 const app = initializeApp(firebaseConfig);
@@ -65,7 +46,7 @@ const auth = getAuth(app);
 export default function App() {
   // State variables for authentication and data
   const [user, setUser] = useState(null);
-  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isAuthReady, setIsAuthReady] = useState(null); // Changed to null to indicate initial unknown state
   const [view, setView] = useState('dashboard');
   const [recipes, setRecipes] = useState([]);
   const [inventory, setInventory] = useState([]);
@@ -517,7 +498,7 @@ export default function App() {
         delay *= 2;
     }
     
-    setIsLoadingAIDistillation(false);
+    setIsLoadingAIBottling(false);
 
     if (jsonResult) {
       setBottlingForm(prevForm => {
@@ -712,8 +693,8 @@ export default function App() {
       const userId = user.uid;
       await setDoc(doc(db, `artifacts/${appId}/users/${userId}/inventory`, itemId), { deleted: true }, { merge: true });
       showNotification("Inventory item removed successfully!");
-    } catch (e) {
-      console.error("Error removing inventory item: ", e);
+    } catch (error) { // Changed 'e' to 'error' for consistency
+      console.error("Error removing inventory item: ", error);
       showNotification("Error removing inventory item. Please try again.");
     }
   };
@@ -822,9 +803,9 @@ export default function App() {
                     type="button"
                     onClick={startDistillationListening}
                     className={`${micButton} ${isListeningDistillation ? 'bg-red-600' : 'bg-[#4E3629]'}`}
-                    disabled={isLoadingAIDistillation}
+                    disabled={isLoadingAIBottling ? <LoaderCircle size={24} className={loadingSpinner} /> : isListeningBottling ? <MicOff size={24} /> : <Mic size={24} />}
                   >
-                    {isLoadingAIDistillation ? <LoaderCircle size={24} className={loadingSpinner} /> : isListeningDistillation ? <MicOff size={24} /> : <Mic size={24} />}
+                    {isLoadingAIBottling ? <LoaderCircle size={24} className={loadingSpinner} /> : isListeningBottling ? <MicOff size={24} /> : <Mic size={24} />}
                   </button>
                 </h2>
                 <form onSubmit={handleDistillationSubmit} className="space-y-4">
@@ -942,105 +923,108 @@ export default function App() {
 
             {view === 'logs' && (
               <div className={card}>
-                <h2 className="text-2xl font-bold mb-6 flex items-center text-[#8A2A2B]">
-                    <List size={24} className="mr-2 text-[#8A2A2B]" /> Production Log History
-                  </h2>
-                  <button onClick={exportLogsToPDF} className={`${button} flex items-center`}>
-                    <FileDown size={20} className="mr-2 text-[#F4EFEA]" /> Export to PDF
-                  </button>
-                </div>
-                
-                <div className="overflow-x-auto" id="logs-table">
-                  <h1 className="text-2xl font-extrabold mb-4 text-[#8A2A2B]">Production Log History</h1>
-                  <table className="min-w-full bg-[#E0D8D0] rounded-xl overflow-hidden">
-                    <thead className={tableHeader}>
-                      <tr className="bg-[#C8C2BA] text-left text-[#4E3629]">
-                        <th className={`${tableCell} whitespace-nowrap`}>Type</th>
-                        <th className={`${tableCell} whitespace-nowrap`}>Date</th>
-                        <th className={`${tableCell} whitespace-nowrap`}>Start Time</th>
-                        <th className={`${tableCell} whitespace-nowrap`}>Product / Recipe</th>
-                        <th className={`${tableCell} whitespace-nowrap`}>Amount</th>
-                        <th className={`${tableCell} whitespace-nowrap`}>ABV / Lot No.</th>
-                        <th className={`${tableCell} whitespace-nowrap`}>Lower Plate</th>
-                        <th className={`${tableCell} whitespace-nowrap`}>Upper Plate</th>
-                        <th className={`${tableCell} whitespace-nowrap`}>Dephlegmator</th>
-                        <th className={`${tableCell} whitespace-nowrap`}>Notes</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {/* Pagination logic for combined logs */}
-                      {(() => {
-                        const totalPages = Math.ceil(combinedLogs.length / itemsPerPage);
-                        const startIndex = (currentPage - 1) * itemsPerPage;
-                        const endIndex = startIndex + itemsPerPage;
-                        const currentLogsSlice = combinedLogs.slice(startIndex, endIndex);
+                <> {/* Added Fragment here */}
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold mb-4 flex items-center text-[#8A2A2B]">
+                      <List size={24} className="mr-2 text-[#8A2A2B]" /> Production Log History
+                    </h2>
+                    <button onClick={exportLogsToPDF} className={`${button} flex items-center`}>
+                      <FileDown size={20} className="mr-2 text-[#F4EFEA]" /> Export to PDF
+                    </button>
+                  </div>
+                  
+                  <div className="overflow-x-auto" id="logs-table">
+                    <h1 className="text-2xl font-bold mb-4 text-[#8A2A2B]">Production Log History</h1>
+                    <table className="min-w-full bg-[#E0D8D0] rounded-xl overflow-hidden">
+                      <thead className={tableHeader}>
+                        <tr className="bg-[#C8C2BA] text-left text-[#4E3629]">
+                          <th className={`${tableCell} whitespace-nowrap`}>Type</th>
+                          <th className={`${tableCell} whitespace-nowrap`}>Date</th>
+                          <th className={`${tableCell} whitespace-nowrap`}>Start Time</th>
+                          <th className={`${tableCell} whitespace-nowrap`}>Product / Recipe</th>
+                          <th className={`${tableCell} whitespace-nowrap`}>Amount</th>
+                          <th className={`${tableCell} whitespace-nowrap`}>ABV / Lot No.</th>
+                          <th className={`${tableCell} whitespace-nowrap`}>Lower Plate</th>
+                          <th className={`${tableCell} whitespace-nowrap`}>Upper Plate</th>
+                          <th className={`${tableCell} whitespace-nowrap`}>Dephlegmator</th>
+                          <th className={`${tableCell} whitespace-nowrap`}>Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {/* Pagination logic for combined logs */}
+                        {(() => {
+                          const totalPages = Math.ceil(combinedLogs.length / itemsPerPage);
+                          const startIndex = (currentPage - 1) * itemsPerPage;
+                          const endIndex = startIndex + itemsPerPage;
+                          const currentLogsSlice = combinedLogs.slice(startIndex, endIndex);
 
-                        return currentLogsSlice.map(log => (
-                          <tr key={log.id} className={tableRow}>
-                            <td className={tableCell}>
-                              <span className={`px-2 py-1 rounded-full text-xs font-semibold ${log.type === 'distillation' ? 'bg-[#8A2A2B] text-[#F4EFEA]' : 'bg-[#8A2A2B] text-[#F4EFEA]'}`}>
-                                {log.type.charAt(0).toUpperCase() + log.type.slice(1)}
-                              </span>
-                            </td>
-                            <td className={tableCell}>{new Date(log.date).toLocaleDateString()}</td>
-                            <td className={tableCell}>{log.type === 'distillation' ? log.distillationStart : log.bottlingStartTime}</td>
-                            <td className={tableCell}>{log.type === 'distillation' ? log.recipeName : log.product}</td>
-                            <td className={tableCell}>
-                              {log.type === 'distillation' ? `${log.distillateAmount} L` : `${log.bottledAmount} units`}
-                            </td>
-                            <td className={tableCell}>
-                              {log.type === 'distillation' ? `${log.distillateABV}%` : log.lotNumber}
-                            </td>
-                            <td className={tableCell}>
-                              {log.type === 'distillation' ? (log.lowerPlateOn ? 'On' : 'Off') : '-'}
-                            </td>
-                            <td className={tableCell}>
-                              {log.type === 'distillation' ? (log.upperPlateOn ? 'On' : 'Off') : '-'}
-                            </td>
-                            <td className={tableCell}>
-                              {log.type === 'distillation' ? (log.dephlegmatorOn ? 'On' : 'Off') : '-'}
-                            </td>
-                            <td className={tableCell}>{log.notes}</td>
-                          </tr>
-                        ));
-                      })()}
-                    </tbody>
-                  </table>
-                </div>
-                {(() => {
-                  const totalPages = Math.ceil(combinedLogs.length / itemsPerPage);
-                  const pages = [];
-                  for (let i = 1; i <= totalPages; i++) {
-                    pages.push(
-                      <button
-                        key={i}
-                        onClick={() => setCurrentPage(i)}
-                        className={`${paginationButton} ${currentPage === i ? activePageButton : ''}`}
-                      >
-                        {i}
-                      </button>
+                          return currentLogsSlice.map(log => (
+                            <tr key={log.id} className={tableRow}>
+                              <td className={tableCell}>
+                                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${log.type === 'distillation' ? 'bg-[#8A2A2B]' : 'bg-[#8A2A2B]'} text-[#F4EFEA]`}>
+                                  {log.type.charAt(0).toUpperCase() + log.type.slice(1)}
+                                </span>
+                              </td>
+                              <td className={tableCell}>{new Date(log.date).toLocaleDateString()}</td>
+                              <td className={tableCell}>{log.type === 'distillation' ? log.distillationStart : log.bottlingStartTime}</td>
+                              <td className={tableCell}>{log.type === 'distillation' ? log.recipeName : log.product}</td>
+                              <td className={tableCell}>
+                                {log.type === 'distillation' ? `${log.distillateAmount} L` : `${log.bottledAmount} units`}
+                              </td>
+                              <td className={tableCell}>
+                                {log.type === 'distillation' ? `${log.distillateABV}%` : log.lotNumber}
+                              </td>
+                              <td className={tableCell}>
+                                {log.type === 'distillation' ? (log.lowerPlateOn ? 'On' : 'Off') : '-'}
+                              </td>
+                              <td className={tableCell}>
+                                {log.type === 'distillation' ? (log.upperPlateOn ? 'On' : 'Off') : '-'}
+                              </td>
+                              <td className={tableCell}>
+                                {log.type === 'distillation' ? (log.dephlegmatorOn ? 'On' : 'Off') : '-'}
+                              </td>
+                              <td className={tableCell}>{log.notes}</td>
+                            </tr>
+                          ));
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                  {(() => {
+                    const totalPages = Math.ceil(combinedLogs.length / itemsPerPage);
+                    const pages = [];
+                    for (let i = 1; i <= totalPages; i++) {
+                      pages.push(
+                        <button
+                          key={i}
+                          onClick={() => setCurrentPage(i)}
+                          className={`${paginationButton} ${currentPage === i ? activePageButton : ''}`}
+                        >
+                          {i}
+                        </button>
+                      );
+                    }
+                    return (
+                      <div className="flex justify-center items-center mt-4">
+                        <button
+                          onClick={() => setCurrentPage(currentPage - 1)}
+                          disabled={currentPage === 1}
+                          className={`${paginationButton} ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+                        {pages}
+                        <button
+                          onClick={() => setCurrentPage(currentPage + 1)}
+                          disabled={currentPage === totalPages}
+                          className={`${paginationButton} ${currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
                     );
-                  }
-                  return (
-                    <div className="flex justify-center items-center mt-4">
-                      <button
-                        onClick={() => setCurrentPage(currentPage - 1)}
-                        disabled={currentPage === 1}
-                        className={`${paginationButton} ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        <ChevronLeft size={16} />
-                      </button>
-                      {pages}
-                      <button
-                        onClick={() => setCurrentPage(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                        className={`${paginationButton} ${currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        <ChevronRight size={16} />
-                      </button>
-                    </div>
-                  );
-                })()}
+                  })()}
+                </> {/* End Added Fragment */}
               </div>
             )}
 
@@ -1052,7 +1036,7 @@ export default function App() {
                     type="button"
                     onClick={startBottlingListening}
                     className={`${micButton} ${isListeningBottling ? 'bg-red-600' : 'bg-[#4E3629]'}`}
-                    disabled={isLoadingAIBottling}
+                    disabled={isLoadingAIBottling ? <LoaderCircle size={24} className={loadingSpinner} /> : isListeningBottling ? <MicOff size={24} /> : <Mic size={24} />}
                   >
                     {isLoadingAIBottling ? <LoaderCircle size={24} className={loadingSpinner} /> : isListeningBottling ? <MicOff size={24} /> : <Mic size={24} />}
                   </button>
@@ -1224,8 +1208,8 @@ export default function App() {
                       </div>
                     ))}
                     <div className="flex flex-col space-y-4 items-start">
-                      <button type="button" onClick={() => setRecipeForm({ ...recipeForm, ingredients: [...recipeForm.ingredients, { name: '', quantity: '', unit: '' }] })} className="text-[#8A2A2B] hover:text-[#6D2121]">
-                        + Add Another Material
+                      <button type="button" onClick={() => setRecipeForm(prev => ({ ...prev, ingredients: [...prev.ingredients, { name: '', quantity: '', unit: '' }] }))} className="text-[#8A2A2B] hover:text-[#6D2121]">
+                        + Add Another Ingredient
                       </button>
                       <button type="submit" className={button}>Add Recipe</button>
                     </div>
@@ -1262,7 +1246,7 @@ export default function App() {
                       </div>
                     ))}
                     <div className="flex flex-col space-y-4 items-start">
-                      <button type="button" onClick={() => setBottlingMaterialsForm({ ...bottlingMaterialsForm, materials: [...bottlingMaterialsForm.materials, { name: '', quantity: '' }] })} className="text-[#8A2A2B] hover:text-[#6D2121]">
+                      <button type="button" onClick={() => setBottlingMaterialsForm(prev => ({ ...prev, materials: [...prev.materials, { name: '', quantity: '' }] }))} className="text-[#8A2A2B] hover:text-[#6D2121]">
                         + Add Another Material
                       </button>
                       <button type="submit" className={button}>Save Material Definition</button>

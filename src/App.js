@@ -369,7 +369,159 @@ export default function App() {
   };
 
 
-  // --- AI DICTATION ---
+  // --- AI DICTATION PROCESSING ---
+  const processDistillationDictation = async (transcript) => {
+    setIsLoadingAIDistillation(true);
+    
+    const promptText = `Extract distillation log details from this dictation: "${transcript}". Return a JSON object ONLY with the fields that are explicitly mentioned or clearly implied. Omit any unmentioned fields entirely. Map the mentioned spirit/recipe to 'recipeName'. Map times to 'distillationStart', 'headsCollectionStart', 'heartsCollectionStart', 'heartsCollectionStop' in 'HH:MM' format. Map liters collected to 'distillateAmount'. Map percentage/proof to 'distillateABV'. Map power level to 'powerLevel'. For boolean fields (lowerPlateOn, upperPlateOn, dephlegmatorOn), set true if turned on/active, false if off/deactivated.`;
+
+    const payload = {
+      contents: [{ parts: [{ text: promptText }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            recipeName: { type: "STRING" },
+            distillationStart: { type: "STRING" },
+            powerLevel: { type: "STRING" },
+            ethanolAmount: { type: "NUMBER" },
+            waterIntoStill: { type: "NUMBER" },
+            abvOfCharge: { type: "NUMBER" },
+            headsCollectionStart: { type: "STRING" },
+            heartsCollectionStart: { type: "STRING" },
+            heartsCollectionStop: { type: "STRING" },
+            tailsDuration: { type: "NUMBER" },
+            distillateAmount: { type: "NUMBER" },
+            distillateABV: { type: "NUMBER" },
+            notes: { type: "STRING" },
+            lowerPlateOn: { type: "BOOLEAN" },
+            upperPlateOn: { type: "BOOLEAN" },
+            dephlegmatorOn: { type: "BOOLEAN" }
+          }
+        }
+      }
+    };
+
+    const apiKey = ""; // Execution environment injects this securely
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+    let delay = 1000;
+    let success = false;
+
+    // Retry loop with exponential backoff
+    for (let i = 0; i < 5; i++) {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) throw new Error('API Network error');
+        
+        const result = await response.json();
+        const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+        
+        if (jsonText) {
+          const parsedData = JSON.parse(jsonText);
+          
+          // Update only the explicitly returned fields, maintaining existing state for others
+          setDistillationForm(prev => {
+            const updated = { ...prev };
+            Object.keys(parsedData).forEach(key => {
+              if (parsedData[key] !== null && parsedData[key] !== undefined && parsedData[key] !== "") {
+                updated[key] = parsedData[key];
+              }
+            });
+            return updated;
+          });
+          showNotification("Distillation log fields updated from your voice command!");
+          success = true;
+          break;
+        }
+      } catch (error) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
+      }
+    }
+
+    if (!success) {
+      showNotification("Failed to process speech. Please try speaking again or fill out manually.");
+    }
+    setIsLoadingAIDistillation(false);
+  };
+
+  const processBottlingDictation = async (transcript) => {
+    setIsLoadingAIBottling(true);
+    
+    const promptText = `Extract bottling log details from this dictation: "${transcript}". Return a JSON object ONLY with the fields that are explicitly mentioned or clearly implied. Omit any unmentioned fields entirely. Map product names to 'product'. Map times to 'bottlingStartTime' in 'HH:MM' format. Map total bottle counts to 'bottledAmount'. Map lot numbers to 'lotNumber'. Map other text to 'notes'.`;
+
+    const payload = {
+      contents: [{ parts: [{ text: promptText }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            bottlingStartTime: { type: "STRING" },
+            product: { type: "STRING" },
+            bottledAmount: { type: "NUMBER" },
+            lotNumber: { type: "STRING" },
+            notes: { type: "STRING" }
+          }
+        }
+      }
+    };
+
+    const apiKey = ""; // Execution environment injects this securely
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+    let delay = 1000;
+    let success = false;
+
+    // Retry loop with exponential backoff
+    for (let i = 0; i < 5; i++) {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) throw new Error('API Network error');
+        
+        const result = await response.json();
+        const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+        
+        if (jsonText) {
+          const parsedData = JSON.parse(jsonText);
+          
+          setBottlingForm(prev => {
+            const updated = { ...prev };
+            Object.keys(parsedData).forEach(key => {
+              if (parsedData[key] !== null && parsedData[key] !== undefined && parsedData[key] !== "") {
+                updated[key] = parsedData[key];
+              }
+            });
+            return updated;
+          });
+          showNotification("Bottling log fields updated from your voice command!");
+          success = true;
+          break;
+        }
+      } catch (error) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
+      }
+    }
+
+    if (!success) {
+      showNotification("Failed to process speech. Please try speaking again or fill out manually.");
+    }
+    setIsLoadingAIBottling(false);
+  };
+
   const startListening = (type) => {
     if (!('webkitSpeechRecognition' in window)) {
       showNotification("Speech recognition is not supported in this browser. Please use Chrome.");
@@ -381,11 +533,18 @@ export default function App() {
     
     recognition.onstart = () => {
       type === 'distill' ? setIsListeningDistillation(true) : setIsListeningBottling(true);
-      showNotification("Listening...");
+      showNotification("Listening... (Speak clearly into your microphone)");
     };
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
-      showNotification(`Processing: "${transcript}"`);
+      showNotification(`Processing: "${transcript}"...`);
+      
+      // Route the transcript to the correct AI processor
+      if (type === 'distill') {
+        processDistillationDictation(transcript);
+      } else {
+        processBottlingDictation(transcript);
+      }
     };
     recognition.onerror = () => {
       type === 'distill' ? setIsListeningDistillation(false) : setIsListeningBottling(false);

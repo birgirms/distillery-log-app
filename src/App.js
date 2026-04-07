@@ -457,6 +457,7 @@ export default function App() {
   };
 
   const startEditingLog = (log) => {
+    setExpandedLogId(null);
     setEditingLogId(log.id);
     if (log.type === 'distillation') {
       setDistillationForm(log);
@@ -468,14 +469,108 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // --- PDF EXPORT ---
+  // Pre-calculate filtered logs so the export logic can access them
+  const filteredLogs = combinedLogs.filter(log => {
+    if (historyFilter === 'All') return true;
+    const name = log.recipeName || log.product;
+    return name === historyFilter;
+  });
+
+  const currentLogs = filteredLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);
+  const uniqueFilters = Array.from(new Set(combinedLogs.map(l => l.recipeName || l.product).filter(Boolean)));
+
+  // --- PDF EXPORT ENGINE ---
   const exportPDF = () => {
-    const element = document.getElementById('logs-table');
-    if (window.html2pdf && element) {
-      window.html2pdf(element, { margin: 1, filename: 'production_logs.pdf', jsPDF: { format: 'letter', orientation: 'landscape' } });
-    } else {
+    if (!window.html2pdf) {
       showNotification("PDF Library not loaded yet.");
+      return;
     }
+
+    // 1. Create a hidden container for the clean "Excel-like" grid
+    const printContainer = document.createElement('div');
+    printContainer.style.padding = '20px';
+    printContainer.style.fontFamily = 'Helvetica, Arial, sans-serif';
+    printContainer.style.color = '#333';
+
+    // 2. Add a clean title
+    const title = document.createElement('h2');
+    title.innerText = `Distillery Batch Report - ${historyFilter === 'All' ? 'All Logs' : historyFilter}`;
+    title.style.borderBottom = '2px solid #8A2A2B';
+    title.style.paddingBottom = '10px';
+    title.style.marginBottom = '20px';
+    printContainer.appendChild(title);
+
+    // 3. Build the comprehensive HTML table string
+    let tableHtml = `
+      <table style="width: 100%; border-collapse: collapse; font-size: 9px; text-align: left;">
+        <thead>
+          <tr style="background-color: #f3f4f6; color: #4E3629;">
+            <th style="padding: 6px; border: 1px solid #d1d5db;">Type</th>
+            <th style="padding: 6px; border: 1px solid #d1d5db;">Date & Time</th>
+            <th style="padding: 6px; border: 1px solid #d1d5db;">Recipe / Product</th>
+            <th style="padding: 6px; border: 1px solid #d1d5db;">Yield & Result</th>
+            <th style="padding: 6px; border: 1px solid #d1d5db;">Power & Plates</th>
+            <th style="padding: 6px; border: 1px solid #d1d5db;">Charge Details</th>
+            <th style="padding: 6px; border: 1px solid #d1d5db;">Collection Times</th>
+            <th style="padding: 6px; border: 1px solid #d1d5db;">Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    // 4. Populate rows using ALL filtered logs, not just the paginated ones
+    filteredLogs.forEach(log => {
+      const isDistill = log.type === 'distillation';
+      const date = new Date(log.date).toLocaleDateString();
+      const time = isDistill ? log.distillationStart : log.bottlingStartTime;
+      const dateTime = `${date} ${time || ''}`;
+      
+      const name = log.recipeName || log.product || '-';
+      
+      const yieldStr = isDistill 
+        ? `${log.distillateAmount || 0} L @ ${log.distillateABV || 0}%` 
+        : `${log.bottledAmount || 0} Units (Lot: ${log.lotNumber || '-'})`;
+        
+      const powerPlates = isDistill
+        ? `Power: ${log.powerLevel || '-'}<br/>Plates: L:${log.lowerPlateOn?'Y':'N'} U:${log.upperPlateOn?'Y':'N'} D:${log.dephlegmatorOn?'Y':'N'}`
+        : '-';
+        
+      const charge = isDistill
+        ? `Eth: ${log.ethanolAmount || 0}L<br/>H2O: ${log.waterIntoStill || 0}L<br/>ABV: ${log.abvOfCharge || 0}%`
+        : `Boxes: ${log.boxesUsed || 0}`;
+        
+      const cuts = isDistill
+        ? `Heads: ${log.headsCollectionStart||'-'}<br/>Hearts: ${log.heartsCollectionStart||'-'} to ${log.heartsCollectionStop||'-'}<br/>Tails: ${log.tailsDuration||'0'}m`
+        : '-';
+
+      tableHtml += `
+        <tr style="border-bottom: 1px solid #e5e7eb;">
+          <td style="padding: 6px; border: 1px solid #d1d5db; font-weight: bold; text-transform: uppercase;">${log.type}</td>
+          <td style="padding: 6px; border: 1px solid #d1d5db;">${dateTime}</td>
+          <td style="padding: 6px; border: 1px solid #d1d5db; font-weight: bold;">${name}</td>
+          <td style="padding: 6px; border: 1px solid #d1d5db;">${yieldStr}</td>
+          <td style="padding: 6px; border: 1px solid #d1d5db;">${powerPlates}</td>
+          <td style="padding: 6px; border: 1px solid #d1d5db;">${charge}</td>
+          <td style="padding: 6px; border: 1px solid #d1d5db;">${cuts}</td>
+          <td style="padding: 6px; border: 1px solid #d1d5db; max-width: 150px;">${log.notes || '-'}</td>
+        </tr>
+      `;
+    });
+
+    tableHtml += `</tbody></table>`;
+    printContainer.innerHTML += tableHtml;
+
+    // 5. Fire off the PDF generator
+    const opt = {
+      margin:       0.4,
+      filename:     `Distillery_Report_${historyFilter.replace(/[^a-z0-9]/gi, '_')}.pdf`,
+      image:        { type: 'jpeg', quality: 1 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
+    };
+
+    window.html2pdf().from(printContainer).set(opt).save();
   };
 
   // --- RENDER METHODS ---
@@ -494,16 +589,6 @@ export default function App() {
       </div>
     );
   }
-
-  const filteredLogs = combinedLogs.filter(log => {
-    if (historyFilter === 'All') return true;
-    const name = log.recipeName || log.product;
-    return name === historyFilter;
-  });
-
-  const currentLogs = filteredLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);
-  const uniqueFilters = Array.from(new Set(combinedLogs.map(l => l.recipeName || l.product).filter(Boolean)));
 
   return (
     <div className={tailwind}>

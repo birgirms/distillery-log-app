@@ -21,9 +21,9 @@ const tableRow = "border-t border-[#B5AE9F] hover:bg-[#C8C2BA] transition-colors
 const tableCell = "py-3 px-4 text-sm";
 const paginationButton = "px-4 py-2 mx-1 rounded-full bg-[#C8C2BA] hover:bg-[#8A2A2B] hover:text-[#F4EFEA] text-[#4E3629]";
 
-// Firebase configuration - Corrected to match your screenshot exactly
+// Firebase configuration - Corrected character by character from your screenshot
 const firebaseConfig = {
-  apiKey: "AIzaSyDy1YrRpMwUIAWz1YdwWGgeqEFQpcjZk",
+  apiKey: "AIzaSyDy1Yr1RpPmWuUIAWzlYdwWGgeqEFQpcjZk",
   authDomain: "distillation-app.firebaseapp.com",
   projectId: "distillation-app",
   storageBucket: "distillation-app.firebasestorage.app",
@@ -202,7 +202,6 @@ export default function App() {
             <LogIn size={20} /> Sign in with Google
           </button>
           {authError && <div className="mt-6 p-3 bg-red-100 text-red-700 rounded-xl text-sm border border-red-200">{authError}</div>}
-          <p className="mt-4 text-xs text-gray-500 italic">Make sure line 64 in App.js is set to your Gmail address.</p>
         </div>
       </div>
     );

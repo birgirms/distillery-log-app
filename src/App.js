@@ -21,9 +21,9 @@ const tableRow = "border-t border-[#B5AE9F] hover:bg-[#C8C2BA] transition-colors
 const tableCell = "py-3 px-4 text-sm";
 const paginationButton = "px-4 py-2 mx-1 rounded-full bg-[#C8C2BA] hover:bg-[#8A2A2B] hover:text-[#F4EFEA] text-[#4E3629]";
 
-// Firebase configuration - Hardcoded for Netlify deployment
+// Firebase configuration - Corrected to match your screenshot exactly
 const firebaseConfig = {
-  apiKey: "AIzaSyDy1IrRpMwUIAWz1YdwWGgeqEFQpcjZK",
+  apiKey: "AIzaSyDy1YrRpMwUIAWz1YdwWGgeqEFQpcjZk",
   authDomain: "distillation-app.firebaseapp.com",
   projectId: "distillation-app",
   storageBucket: "distillation-app.firebasestorage.app",
@@ -111,7 +111,6 @@ export default function App() {
     setAuthError("");
     try {
       const provider = new GoogleAuthProvider();
-      // Ensure the user is prompted to select their account
       provider.setCustomParameters({ prompt: 'select_account' });
       
       const result = await signInWithPopup(auth, provider);
@@ -122,7 +121,6 @@ export default function App() {
       }
     } catch (err) {
       console.error("Login error:", err);
-      // Display the specific Firebase error code/message for debugging
       setAuthError(err.message.includes("closed-by-user") 
         ? "Login window was closed. Please try again." 
         : `Login failed: ${err.code || err.message}`);

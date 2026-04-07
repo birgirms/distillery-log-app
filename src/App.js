@@ -21,9 +21,9 @@ const tableRow = "border-t border-[#B5AE9F] hover:bg-[#C8C2BA] transition-colors
 const tableCell = "py-3 px-4 text-sm";
 const paginationButton = "px-4 py-2 mx-1 rounded-full bg-[#C8C2BA] hover:bg-[#8A2A2B] hover:text-[#F4EFEA] text-[#4E3629]";
 
-// Firebase configuration - Corrected character-by-character from your original screenshot
+// Firebase configuration - Character-perfect correction from your original screenshot
 const firebaseConfig = {
-  apiKey: "AIzaSyDy1Yr1RPpMwUIAWzlydWGGgeqEFQpcjZk",
+  apiKey: "AIzaSyDy1Yr1RPpMwUIAWzlYdwWGgeqEFQpcjZk",
   authDomain: "distillation-app.firebaseapp.com",
   projectId: "distillation-app",
   storageBucket: "distillation-app.firebasestorage.app",
@@ -69,8 +69,6 @@ export default function App() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  const [isListeningDistillation, setIsListeningDistillation] = useState(false);
-  const [isLoadingAIDistillation, setIsLoadingAIDistillation] = useState(false);
 
   // Auth Listener
   useEffect(() => {
@@ -121,11 +119,9 @@ export default function App() {
       }
     } catch (err) {
       console.error("Login error:", err);
-      // Clean up the error message for display
-      const displayError = err.code ? `Error: ${err.code}` : err.message;
       setAuthError(err.message.includes("closed-by-user") 
         ? "Login window was closed. Please try again." 
-        : `Login failed: ${displayError}`);
+        : `Login failed: ${err.code || err.message}`);
     }
   };
 

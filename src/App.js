@@ -49,7 +49,10 @@ export default function App() {
   
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState("");
+  
   const [editingInventoryId, setEditingInventoryId] = useState(null);
+  const [editingLogId, setEditingLogId] = useState(null);
+  
   const [authError, setAuthError] = useState("");
 
   // HARDCODED ADMIN EMAIL
@@ -60,17 +63,19 @@ export default function App() {
     name: '', type: 'ingredient', quantity: '', unit: '', lowStockThreshold: '', leadTimeDays: ''
   });
 
-  const [distillationForm, setDistillationForm] = useState({
+  const emptyDistillationForm = {
     date: new Date().toISOString().slice(0, 16), recipeName: '', finalProduct: '', ethanolAmount: '',
     waterIntoStill: '', abvOfCharge: '', headsCollectionStart: '', heartsCollectionStart: '', heartsCollectionStop: '',
     tailsDuration: '', distillateAmount: '', distillateABV: '', powerLevel: '', distillationStart: '', notes: '',
     lowerPlateOn: false, upperPlateOn: false, dephlegmatorOn: false,
-  });
+  };
+  const [distillationForm, setDistillationForm] = useState(emptyDistillationForm);
 
-  const [bottlingForm, setBottlingForm] = useState({
+  const emptyBottlingForm = {
     date: new Date().toISOString().slice(0, 10), bottlingStartTime: '', product: '', bottledAmount: '',
     boxesUsed: '', lotNumber: '', notes: '', bottlingMaterialDefinition: ''
-  });
+  };
+  const [bottlingForm, setBottlingForm] = useState(emptyBottlingForm);
 
   const [recipeForm, setRecipeForm] = useState({
     name: '', product: '', ingredients: [{ name: '', quantity: '', unit: '' }],
@@ -218,73 +223,97 @@ export default function App() {
   };
 
   // --- LOG SUBMISSIONS & DEDUCTIONS ---
-  const handleDistillationSubmit = async (e) => {
+  const handleLogSubmit = async (e, type) => {
     e.preventDefault();
     if (!user) return;
-    try {
-      await addDoc(collection(db, 'artifacts', 'distillation-app', 'users', user.uid, 'distillationLogs'), {
-        ...distillationForm, timestamp: new Date()
-      });
-      showNotification("Distillation log saved! Ingredients deducted.");
+    const path = type === 'distillation' ? 'distillationLogs' : 'bottlingLogs';
+    
+    // Distillation formatting
+    const formToSave = type === 'distillation' ? { ...distillationForm } : { 
+      ...bottlingForm,
+      bottledAmount: bottlingForm.bottledAmount,
+      boxesUsed: Math.floor((bottlingForm.bottledAmount || 0) / 6)
+    };
 
-      // Automatic Inventory Deduction
-      const recipe = recipes.find(r => r.name === distillationForm.recipeName);
-      if (recipe) {
-        for (const ingredient of recipe.ingredients) {
-          const invItem = inventory.find(i => i.name === ingredient.name);
-          if (invItem) {
-            const newQuantity = (invItem.quantity || 0) - (ingredient.quantity || 0);
-            await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), {
-              quantity: newQuantity > 0 ? newQuantity : 0,
-            });
+    try {
+      if (editingLogId) {
+        // Update existing log without re-deducting inventory
+        await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, path, editingLogId), formToSave);
+        showNotification("Log Updated Successfully");
+        setEditingLogId(null);
+      } else {
+        // Add new log
+        await addDoc(collection(db, 'artifacts', 'distillation-app', 'users', user.uid, path), {
+          ...formToSave, timestamp: new Date()
+        });
+        showNotification("Log Saved Successfully! Inventory Deducted.");
+
+        // Automatic Inventory Deduction (Only on NEW logs)
+        if (type === 'distillation') {
+          const recipe = recipes.find(r => r.name === distillationForm.recipeName);
+          if (recipe) {
+            for (const ingredient of recipe.ingredients) {
+              const invItem = inventory.find(i => i.name === ingredient.name);
+              if (invItem) {
+                const newQuantity = (invItem.quantity || 0) - (ingredient.quantity || 0);
+                await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), {
+                  quantity: newQuantity > 0 ? newQuantity : 0,
+                });
+              }
+            }
+          }
+        } else {
+          const matDef = bottlingMaterialDefinitions.find(def => def.name === bottlingForm.product);
+          if (matDef) {
+            for (const mat of matDef.materials) {
+              const invItem = inventory.find(item => item.name === mat.name && item.type === 'bottling_material');
+              if (invItem) {
+                const newQuantity = (invItem.quantity || 0) - (mat.quantity * bottlingForm.bottledAmount);
+                await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), {
+                  quantity: newQuantity > 0 ? newQuantity : 0,
+                });
+              }
+            }
           }
         }
       }
 
-      setDistillationForm({
-        date: new Date().toISOString().slice(0, 16), recipeName: '', finalProduct: '', ethanolAmount: '',
-        waterIntoStill: '', abvOfCharge: '', headsCollectionStart: '', heartsCollectionStart: '', heartsCollectionStop: '',
-        tailsDuration: '', distillateAmount: '', distillateABV: '', powerLevel: '', distillationStart: '', notes: '',
-        lowerPlateOn: false, upperPlateOn: false, dephlegmatorOn: false,
-      });
-    } catch (err) { showNotification("Error submitting log."); }
-  };
-
-  const handleBottlingSubmit = async (e) => {
-    e.preventDefault();
-    if (!user) return;
-    try {
-      const finalBottlingForm = {
-        ...bottlingForm,
-        bottledAmount: bottlingForm.bottledAmount,
-        boxesUsed: Math.floor((bottlingForm.bottledAmount || 0) / 6),
-        timestamp: new Date(),
-      };
-      await addDoc(collection(db, 'artifacts', 'distillation-app', 'users', user.uid, 'bottlingLogs'), finalBottlingForm);
-      showNotification("Bottling log saved! Materials deducted.");
-
-      // Automatic Inventory Deduction
-      const matDef = bottlingMaterialDefinitions.find(def => def.name === finalBottlingForm.product);
-      if (matDef) {
-        for (const mat of matDef.materials) {
-          const invItem = inventory.find(item => item.name === mat.name && item.type === 'bottling_material');
-          if (invItem) {
-            const newQuantity = (invItem.quantity || 0) - (mat.quantity * finalBottlingForm.bottledAmount);
-            await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), {
-              quantity: newQuantity > 0 ? newQuantity : 0,
-            });
-          }
-        }
+      // Reset forms
+      if (type === 'distillation') {
+        setDistillationForm(emptyDistillationForm);
+      } else {
+        setBottlingForm(emptyBottlingForm);
       }
-
-      setBottlingForm({
-        date: new Date().toISOString().slice(0, 10), bottlingStartTime: '', product: '', bottledAmount: '',
-        boxesUsed: '', lotNumber: '', notes: '', bottlingMaterialDefinition: ''
-      });
-    } catch (err) { showNotification("Error submitting bottling log."); }
+    } catch (err) { showNotification("Error saving log."); }
   };
 
-  // --- AI DICTATION (Restored functionality wrappers) ---
+  const deleteLogItem = async (id, type) => {
+    if (!user) return;
+    if (window.confirm("Are you sure you want to permanently delete this batch log? (Inventory will not be automatically restocked)")) {
+      try {
+        const path = type === 'distillation' ? 'distillationLogs' : 'bottlingLogs';
+        await deleteDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, path, id));
+        showNotification("Batch Log Deleted.");
+      } catch(err) {
+        showNotification("Error deleting log.");
+      }
+    }
+  };
+
+  const startEditingLog = (log) => {
+    setEditingLogId(log.id);
+    if (log.type === 'distillation') {
+      setDistillationForm(log);
+      setView('distillation');
+    } else {
+      setBottlingForm(log);
+      setView('bottling');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+
+  // --- AI DICTATION ---
   const startListening = (type) => {
     if (!('webkitSpeechRecognition' in window)) {
       showNotification("Speech recognition is not supported in this browser. Please use Chrome.");
@@ -301,8 +330,6 @@ export default function App() {
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
       showNotification(`Processing: "${transcript}"`);
-      // Note: This relies on a backend or a valid Gemini API key to parse the JSON.
-      // If no valid Gemini key is present, it handles gracefully.
     };
     recognition.onerror = () => {
       type === 'distill' ? setIsListeningDistillation(false) : setIsListeningBottling(false);
@@ -312,7 +339,6 @@ export default function App() {
     };
     recognition.start();
   };
-
 
   // --- PDF EXPORT ---
   const exportPDF = () => {
@@ -355,8 +381,8 @@ export default function App() {
         </div>
         <nav className="flex bg-[#E0D8D0] rounded-2xl p-2 shadow-xl overflow-x-auto gap-1">
           <button onClick={() => setView('dashboard')} className={`${tabButton} ${view === 'dashboard' ? activeTab : inactiveTab}`}><Home size={18} className="mr-1"/>Home</button>
-          <button onClick={() => setView('distillation')} className={`${tabButton} ${view === 'distillation' ? activeTab : inactiveTab}`}><FlaskConical size={18} className="mr-1"/>Log Run</button>
-          <button onClick={() => setView('bottling')} className={`${tabButton} ${view === 'bottling' ? activeTab : inactiveTab}`}><GlassWater size={18} className="mr-1"/>Bottling</button>
+          <button onClick={() => {setView('distillation'); setEditingLogId(null); setDistillationForm(emptyDistillationForm);}} className={`${tabButton} ${view === 'distillation' ? activeTab : inactiveTab}`}><FlaskConical size={18} className="mr-1"/>Log Run</button>
+          <button onClick={() => {setView('bottling'); setEditingLogId(null); setBottlingForm(emptyBottlingForm);}} className={`${tabButton} ${view === 'bottling' ? activeTab : inactiveTab}`}><GlassWater size={18} className="mr-1"/>Bottling</button>
           <button onClick={() => setView('inventory')} className={`${tabButton} ${view === 'inventory' ? activeTab : inactiveTab}`}><Archive size={18} className="mr-1"/>Inventory</button>
           <button onClick={() => setView('logHistory')} className={`${tabButton} ${view === 'logHistory' ? activeTab : inactiveTab}`}><List size={18} className="mr-1"/>History</button>
         </nav>
@@ -401,12 +427,12 @@ export default function App() {
         {view === 'distillation' && (
           <div className={card}>
             <h2 className="text-2xl font-bold mb-6 text-[#8A2A2B] flex justify-between items-center">
-              <div className="flex items-center gap-2"><FlaskConical size={24}/> New Distillation Log</div>
-              <button onClick={() => startListening('distill')} className={micButton} disabled={isLoadingAIDistillation}>
+              <div className="flex items-center gap-2"><FlaskConical size={24}/> {editingLogId ? "Edit Distillation Log" : "New Distillation Log"}</div>
+              <button type="button" onClick={() => startListening('distill')} className={micButton} disabled={isLoadingAIDistillation}>
                 {isLoadingAIDistillation ? <LoaderCircle size={20} className={loadingSpinner}/> : isListeningDistillation ? <MicOff size={20}/> : <Mic size={20}/>}
               </button>
             </h2>
-            <form onSubmit={handleDistillationSubmit} className="space-y-4">
+            <form onSubmit={(e) => handleLogSubmit(e, 'distillation')} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Date & Time</label>
@@ -486,7 +512,15 @@ export default function App() {
               </div>
 
               <textarea placeholder="Additional Notes..." value={distillationForm.notes} onChange={e => setDistillationForm({...distillationForm, notes: e.target.value})} className={inputField + " h-24"} />
-              <button type="submit" className={button + " w-full uppercase tracking-widest text-lg mt-4"}>Submit Run</button>
+              
+              <div className="flex gap-2">
+                <button type="submit" className={button + " flex-1 uppercase tracking-widest text-lg mt-4"}>
+                  {editingLogId ? "Update Run Log" : "Submit Run"}
+                </button>
+                {editingLogId && (
+                  <button type="button" onClick={() => {setEditingLogId(null); setDistillationForm(emptyDistillationForm); setView('logHistory');}} className="mt-4 bg-gray-500 text-white p-3 rounded-xl"><X size={24}/></button>
+                )}
+              </div>
             </form>
           </div>
         )}
@@ -495,12 +529,12 @@ export default function App() {
         {view === 'bottling' && (
           <div className={card}>
             <h2 className="text-2xl font-bold mb-6 text-[#8A2A2B] flex justify-between items-center">
-              <div className="flex items-center gap-2"><GlassWater size={24}/> New Bottling Log</div>
-              <button onClick={() => startListening('bottle')} className={micButton} disabled={isLoadingAIBottling}>
+              <div className="flex items-center gap-2"><GlassWater size={24}/> {editingLogId ? "Edit Bottling Log" : "New Bottling Log"}</div>
+              <button type="button" onClick={() => startListening('bottle')} className={micButton} disabled={isLoadingAIBottling}>
                 {isLoadingAIBottling ? <LoaderCircle size={20} className={loadingSpinner}/> : isListeningBottling ? <MicOff size={20}/> : <Mic size={20}/>}
               </button>
             </h2>
-            <form onSubmit={handleBottlingSubmit} className="space-y-4">
+            <form onSubmit={(e) => handleLogSubmit(e, 'bottling')} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Date</label>
@@ -526,13 +560,21 @@ export default function App() {
                   <input type="number" value={bottlingForm.bottledAmount} onChange={e => setBottlingForm({...bottlingForm, bottledAmount: e.target.value})} className={inputField} required />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Lot Number</label>
-                  <input type="text" value={bottlingForm.lotNumber} onChange={e => setBottlingForm({...bottlingForm, lotNumber: e.target.value})} className={inputField} required />
+                  <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Lot Number (Optional)</label>
+                  <input type="text" value={bottlingForm.lotNumber} onChange={e => setBottlingForm({...bottlingForm, lotNumber: e.target.value})} className={inputField} />
                 </div>
               </div>
 
               <textarea placeholder="Notes..." value={bottlingForm.notes} onChange={e => setBottlingForm({...bottlingForm, notes: e.target.value})} className={inputField + " h-24"} />
-              <button type="submit" className={button + " w-full uppercase tracking-widest text-lg mt-4"}>Submit Bottling</button>
+              
+              <div className="flex gap-2">
+                <button type="submit" className={button + " flex-1 uppercase tracking-widest text-lg mt-4"}>
+                  {editingLogId ? "Update Bottling Log" : "Submit Bottling"}
+                </button>
+                {editingLogId && (
+                  <button type="button" onClick={() => {setEditingLogId(null); setBottlingForm(emptyBottlingForm); setView('logHistory');}} className="mt-4 bg-gray-500 text-white p-3 rounded-xl"><X size={24}/></button>
+                )}
+              </div>
             </form>
           </div>
         )}
@@ -554,8 +596,8 @@ export default function App() {
                       <td className="p-3 capitalize">{item.type.replace('_', ' ')}</td>
                       <td className={`p-3 ${item.quantity <= item.lowStockThreshold ? 'text-red-700 font-black' : ''}`}>{item.quantity} {item.unit}</td>
                       <td className="p-3 flex justify-center gap-3">
-                        <button onClick={() => {setEditingInventoryId(item.id); setInventoryForm(item);}} className="p-2 text-blue-700 hover:bg-blue-100 rounded-lg"><Pencil size={18}/></button>
-                        <button onClick={() => deleteInventoryItem(item.id)} className="p-2 text-red-700 hover:bg-red-100 rounded-lg"><Trash2 size={18}/></button>
+                        <button type="button" onClick={() => {setEditingInventoryId(item.id); setInventoryForm(item);}} className="p-2 text-blue-700 hover:bg-blue-100 rounded-lg"><Pencil size={18}/></button>
+                        <button type="button" onClick={() => deleteInventoryItem(item.id)} className="p-2 text-red-700 hover:bg-red-100 rounded-lg"><Trash2 size={18}/></button>
                       </td>
                     </tr>
                   ))}
@@ -605,8 +647,13 @@ export default function App() {
                     <p className="font-bold text-sm">Ingredients:</p>
                     {recipeForm.ingredients.map((ing, i) => (
                       <div key={i} className="flex gap-2">
-                        <input type="text" placeholder="Name" value={ing.name} onChange={e => { const n = [...recipeForm.ingredients]; n[i].name = e.target.value; setRecipeForm({...recipeForm, ingredients: n}); }} className={inputField} required />
-                        <input type="number" placeholder="Qty" value={ing.quantity} onChange={e => { const n = [...recipeForm.ingredients]; n[i].quantity = e.target.value; setRecipeForm({...recipeForm, ingredients: n}); }} className={`${inputField} w-24`} required />
+                        <select value={ing.name} onChange={e => { const n = [...recipeForm.ingredients]; n[i].name = e.target.value; setRecipeForm({...recipeForm, ingredients: n}); }} className={inputField} required>
+                           <option value="">Select Ingredient...</option>
+                           {inventory.filter(inv => inv.type === 'ingredient').map(inv => (
+                             <option key={inv.id} value={inv.name}>{inv.name}</option>
+                           ))}
+                        </select>
+                        <input type="number" step="0.01" placeholder="Qty" value={ing.quantity} onChange={e => { const n = [...recipeForm.ingredients]; n[i].quantity = e.target.value; setRecipeForm({...recipeForm, ingredients: n}); }} className={`${inputField} w-24`} required />
                         <button type="button" onClick={() => { const n = [...recipeForm.ingredients]; n.splice(i, 1); setRecipeForm({...recipeForm, ingredients: n}); }} className="text-red-700"><Trash2 size={20}/></button>
                       </div>
                     ))}
@@ -629,8 +676,13 @@ export default function App() {
                     <p className="font-bold text-sm">Materials required per 1 unit:</p>
                     {bottlingMaterialsForm.materials.map((mat, i) => (
                       <div key={i} className="flex gap-2">
-                        <input type="text" placeholder="Material" value={mat.name} onChange={e => { const n = [...bottlingMaterialsForm.materials]; n[i].name = e.target.value; setBottlingMaterialsForm({...bottlingMaterialsForm, materials: n}); }} className={inputField} required />
-                        <input type="number" placeholder="Qty" value={mat.quantity} onChange={e => { const n = [...bottlingMaterialsForm.materials]; n[i].quantity = e.target.value; setBottlingMaterialsForm({...bottlingMaterialsForm, materials: n}); }} className={`${inputField} w-24`} required />
+                        <select value={mat.name} onChange={e => { const n = [...bottlingMaterialsForm.materials]; n[i].name = e.target.value; setBottlingMaterialsForm({...bottlingMaterialsForm, materials: n}); }} className={inputField} required>
+                           <option value="">Select Material...</option>
+                           {inventory.filter(inv => inv.type === 'bottling_material').map(inv => (
+                             <option key={inv.id} value={inv.name}>{inv.name}</option>
+                           ))}
+                        </select>
+                        <input type="number" step="0.01" placeholder="Qty" value={mat.quantity} onChange={e => { const n = [...bottlingMaterialsForm.materials]; n[i].quantity = e.target.value; setBottlingMaterialsForm({...bottlingMaterialsForm, materials: n}); }} className={`${inputField} w-24`} required />
                         <button type="button" onClick={() => { const n = [...bottlingMaterialsForm.materials]; n.splice(i, 1); setBottlingMaterialsForm({...bottlingMaterialsForm, materials: n}); }} className="text-red-700"><Trash2 size={20}/></button>
                       </div>
                     ))}
@@ -655,7 +707,7 @@ export default function App() {
               <table className="w-full bg-white/40 rounded-xl overflow-hidden shadow-inner border border-[#B5AE9F]">
                 <thead className={tableHeader}>
                   <tr className="text-[10px] uppercase tracking-tighter">
-                    <th className="p-3">Type</th><th className="p-3">Date</th><th className="p-3">Recipe/Product</th><th className="p-3">Yield</th><th className="p-3">ABV/Lot</th><th className="p-3">Notes</th>
+                    <th className="p-3">Type</th><th className="p-3">Date</th><th className="p-3">Recipe/Product</th><th className="p-3">Yield</th><th className="p-3">ABV/Lot</th><th className="p-3 text-center">Manage</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -665,8 +717,11 @@ export default function App() {
                       <td className="p-3 text-xs">{new Date(log.date).toLocaleDateString()}</td>
                       <td className="p-3 font-bold text-sm">{log.recipeName || log.product}</td>
                       <td className="p-3 text-sm">{log.distillateAmount || log.bottledAmount} {log.type === 'distillation' ? 'L' : 'U'}</td>
-                      <td className="p-3 text-sm">{log.distillateABV ? log.distillateABV + '%' : log.lotNumber}</td>
-                      <td className="p-3 text-xs opacity-70 max-w-[150px] truncate">{log.notes}</td>
+                      <td className="p-3 text-sm">{log.distillateABV ? log.distillateABV + '%' : log.lotNumber || '-'}</td>
+                      <td className="p-3 flex justify-center gap-3">
+                        <button type="button" onClick={() => startEditingLog(log)} className="p-2 text-blue-700 hover:bg-blue-100 rounded-lg"><Pencil size={18}/></button>
+                        <button type="button" onClick={() => deleteLogItem(log.id, log.type)} className="p-2 text-red-700 hover:bg-red-100 rounded-lg"><Trash2 size={18}/></button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -685,7 +740,7 @@ export default function App() {
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
           <div className="bg-[#F4EFEA] p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center border-t-8 border-[#8A2A2B]">
             <p className="text-lg font-black text-[#4E3629] mb-6">{notificationMessage}</p>
-            <button onClick={() => setShowNotificationModal(false)} className={button + " w-full"}>DISMISS</button>
+            <button type="button" onClick={() => setShowNotificationModal(false)} className={button + " w-full"}>DISMISS</button>
           </div>
         </div>
       )}

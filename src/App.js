@@ -1,64 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, addDoc, onSnapshot, collection, query, where, updateDoc, deleteDoc } from 'firebase/firestore';
-import { Archive, FlaskConical, GlassWater, NotebookPen, Home, Plus, Trash2, Mic, MicOff, LoaderCircle, List, Sprout, ChevronLeft, ChevronRight, FileDown, Pencil, X } from 'lucide-react';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, addDoc, onSnapshot, collection, query, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { Archive, FlaskConical, GlassWater, Home, Plus, Trash2, Mic, MicOff, LoaderCircle, List, ChevronLeft, ChevronRight, FileDown, Pencil, X, LogIn, LogOut } from 'lucide-react';
 
-// Include the html2pdf library for PDF export functionality.
-const html2pdfScript = document.createElement('script');
-html2pdfScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-document.head.appendChild(html2pdfScript);
+// Tailwind CSS classes
+const tailwind = "bg-[#F4EFEA] text-[#4E3629] min-h-screen p-8 font-sans transition-all duration-300 flex flex-col items-center";
+const card = "bg-[#E0D8D0] rounded-2xl shadow-xl p-6 mb-8 w-full max-w-4xl";
+const inputField = "bg-[#C8C2BA] text-[#4E3629] p-3 rounded-xl w-full focus:outline-none focus:ring-2 focus:ring-[#8A2A2B] placeholder-[#4E3629]";
+const button = "bg-[#4E3629] hover:bg-[#8A2A2B] text-[#F4EFEA] font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105";
+const tabButton = "p-4 flex-1 text-center rounded-xl transition-all duration-200 flex items-center justify-center";
+const activeTab = "bg-[#8A2A2B] text-[#F4EFEA] shadow-lg";
+const inactiveTab = "bg-[#E0D8D0] text-[#4E3629] hover:bg-[#C8C2BA]";
+const notificationBox = "bg-red-700 text-white p-4 rounded-xl mb-4";
+const lowStockItem = "flex justify-between items-center bg-[#C8C2BA] p-3 rounded-xl mb-2";
+const micButton = "bg-[#4E3629] hover:bg-[#8A2A2B] text-[#F4EFEA] font-bold p-3 rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-110 flex items-center justify-center";
+const loadingSpinner = "animate-spin text-[#F4EFEA]";
+const tableHeader = "bg-[#C8C2BA] text-left text-[#4E3629] font-semibold";
+const tableRow = "border-t border-[#B5AE9F] hover:bg-[#C8C2BA] transition-colors";
+const tableCell = "py-3 px-4 text-sm";
+const paginationButton = "px-4 py-2 mx-1 rounded-full bg-[#C8C2BA] hover:bg-[#8A2A2B] hover:text-[#F4EFEA] text-[#4E3629]";
+const activePageButton = "bg-[#8A2A2B] text-[#F4EFEA]";
 
-// Tailwind CSS classes for consistent styling
-const tailwind = `
-  bg-[#F4EFEA] text-[#4E3629] min-h-screen p-8 font-sans transition-all duration-300
-  flex flex-col items-center
-`;
-const card = `bg-[#E0D8D0] rounded-2xl shadow-xl p-6 mb-8 w-full max-w-4xl`;
-const inputField = `bg-[#C8C2BA] text-[#4E3629] p-3 rounded-xl w-full focus:outline-none focus:ring-2 focus:ring-[#8A2A2B] placeholder-[#4E3629]`;
-const button = `bg-[#4E3629] hover:bg-[#8A2A2B] text-[#F4EFEA] font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105`;
-const dangerButton = `bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105`;
-const tabButton = `p-4 flex-1 text-center rounded-xl transition-all duration-200`;
-const activeTab = `bg-[#8A2A2B] text-[#F4EFEA] shadow-lg`;
-const inactiveTab = `bg-[#E0D8D0] text-[#4E3629] hover:bg-[#C8C2BA]`;
-const notificationBox = `bg-red-700 text-white p-4 rounded-xl mb-4`;
-const lowStockItem = `flex justify-between items-center bg-[#C8C2BA] p-3 rounded-xl mb-2`;
-const micButton = `
-  bg-[#4E3629] hover:bg-[#8A2A2B] text-[#F4EFEA] font-bold p-3 rounded-full shadow-lg
-  transition-all duration-200 ease-in-out transform hover:scale-110 flex items-center justify-center
-`;
-const loadingSpinner = `animate-spin text-[#F4EFEA]`;
-const tableHeader = `bg-[#C8C2BA] text-left text-[#4E3629] font-semibold`;
-const tableRow = `border-t border-[#B5AE9F] hover:bg-[#C8C2BA] transition-colors`;
-const tableCell = `py-3 px-4 text-sm`;
-const paginationButton = `px-4 py-2 mx-1 rounded-full bg-[#C8C2BA] hover:bg-[#8A2A2B] hover:text-[#F4EFEA] text-[#4E3629]`;
-const activePageButton = `bg-[#8A2A2B] text-[#F4EFEA]`;
-const timeInput = `bg-[#C8C2BA] text-[#4E3629] p-3 rounded-xl w-full focus:outline-none focus:ring-2 focus:ring-[#8A2A2B]`;
+// Firebase configuration using your specific keys
+const firebaseConfig = {
+  apiKey: "AIzaSyDy1IrRpMwUIAWz1YdwWGgeqEFQpcjZK",
+  authDomain: "distillation-app.firebaseapp.com",
+  projectId: "distillation-app",
+  storageBucket: "distillation-app.firebasestorage.app",
+  messagingSenderId: "198528022551",
+  appId: "1:198528022551:web:fd830c47cdada01faf4452"
+};
 
-
-// Firebase initialization
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// Use the provided auth token or sign in anonymously
-const signIn = async () => {
-  const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-  try {
-    if (token) {
-      await signInWithCustomToken(auth, token);
-    } else {
-      await signInAnonymously(auth);
-    }
-  } catch (error) {
-    console.error("Firebase Auth Error:", error);
-  }
-};
-
-// Main App component
 export default function App() {
-  // State variables for authentication and data
   const [user, setUser] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [view, setView] = useState('dashboard');
@@ -69,577 +47,253 @@ export default function App() {
   const [combinedLogs, setCombinedLogs] = useState([]);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState("");
-  const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-  
-  // Pagination state
+  const [editingInventoryId, setEditingInventoryId] = useState(null);
+  const [authError, setAuthError] = useState("");
+
+  const ADMIN_EMAIL = "your.admin.email@example.com"; // UPDATE THIS TO YOUR EMAIL
+
+  const [inventoryForm, setInventoryForm] = useState({
+    name: '', type: 'ingredient', quantity: '', unit: '', lowStockThreshold: '', leadTimeDays: ''
+  });
+
+  const [distillationForm, setDistillationForm] = useState({
+    date: new Date().toISOString().slice(0, 16), recipeName: '', distillationStart: '', 
+    powerLevel: '', headsCollectionStart: '', heartsCollectionStart: '', heartsCollectionStop: '',
+    tailsDuration: '', distillateAmount: '', distillateABV: '', notes: '',
+    lowerPlateOn: false, upperPlateOn: false, dephlegmatorOn: false,
+  });
+
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-
-  // AI-related state for Distillation
   const [isListeningDistillation, setIsListeningDistillation] = useState(false);
   const [isLoadingAIDistillation, setIsLoadingAIDistillation] = useState(false);
 
-  // AI-related state for Bottling
-  const [isListeningBottling, setIsListeningBottling] = useState(false);
-  const [isLoadingAIBottling, setIsLoadingAIBottling] = useState(false);
-
-  // State for forms
-  const [distillationForm, setDistillationForm] = useState({
-    date: new Date().toISOString().slice(0, 16),
-    recipeName: '',
-    finalProduct: '',
-    ethanolAmount: '',
-    waterIntoStill: '',
-    abvOfCharge: '',
-    headsCollectionStart: '',
-    heartsCollectionStart: '',
-    heartsCollectionStop: '',
-    tailsDuration: '',
-    distillateAmount: '',
-    distillateABV: '',
-    powerLevel: '',
-    distillationStart: '',
-    notes: '',
-    lowerPlateOn: false,
-    upperPlateOn: false,
-    dephlegmatorOn: false,
-  });
-
-  const [bottlingForm, setBottlingForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
-    bottlingStartTime: '',
-    product: '',
-    bottledAmount: '',
-    boxesUsed: '',
-    lotNumber: '',
-    notes: '',
-    bottlingMaterialDefinition: '', 
-  });
-  
-  const [bottlingMaterialDefinitions, setBottlingMaterialDefinitions] = useState([]);
-  const [bottlingMaterialsForm, setBottlingMaterialsForm] = useState({
-    name: '',
-    materials: [{ name: '', quantity: '' }],
-  });
-
-  const [inventoryForm, setInventoryForm] = useState({
-    name: '',
-    type: 'ingredient',
-    quantity: '',
-    unit: '',
-    lowStockThreshold: '',
-    leadTimeDays: '',
-  });
-
-  const [recipeForm, setRecipeForm] = useState({
-    name: '',
-    product: '',
-    ingredients: [{ name: '', quantity: '', unit: '' }],
-  });
-
-  // Track the item currently being edited in inventory
-  const [editingInventoryId, setEditingInventoryId] = useState(null);
-
-  // Effect for Firebase authentication
+  // Auth Listener
   useEffect(() => {
-    signIn();
-
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsAuthReady(true);
     });
-
-    return () => unsubscribeAuth();
+    return () => unsubscribe();
   }, []);
 
-  // Effect for setting up Firestore listeners after authentication
+  // Data Listeners
   useEffect(() => {
-    if (user && isAuthReady) {
-      const userId = user.uid;
-
-      // Inventory listener
-      const inventoryQuery = query(collection(db, 'artifacts', appId, 'users', userId, 'inventory'));
-      const unsubscribeInventory = onSnapshot(inventoryQuery, (snapshot) => {
-        const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setInventory(items);
-      }, (err) => console.error("Inventory error:", err));
-
-      // Recipes listener
-      const recipesQuery = query(collection(db, 'artifacts', appId, 'users', userId, 'recipes'));
-      const unsubscribeRecipes = onSnapshot(recipesQuery, (snapshot) => {
-        const recipesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setRecipes(recipesList);
-      }, (err) => console.error("Recipes error:", err));
-      
-      // Bottling Materials listener
-      const bottlingMaterialsQuery = query(collection(db, 'artifacts', appId, 'users', userId, 'bottlingMaterialDefinitions'));
-      const unsubscribeBottlingMaterials = onSnapshot(bottlingMaterialsQuery, (snapshot) => {
-        const materialsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setBottlingMaterialDefinitions(materialsList);
-      }, (err) => console.error("Bottling Materials error:", err));
-
-      // Distillation logs listener
-      const distillationLogsQuery = query(collection(db, 'artifacts', appId, 'users', userId, 'distillationLogs'));
-      const unsubscribeDistillation = onSnapshot(distillationLogsQuery, (snapshot) => {
-        const logs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, type: 'distillation' }));
-        setDistillationLogs(logs);
-      }, (err) => console.error("Distillation Logs error:", err));
-
-      // Bottling logs listener
-      const bottlingLogsQuery = query(collection(db, 'artifacts', appId, 'users', userId, 'bottlingLogs'));
-      const unsubscribeBottling = onSnapshot(bottlingLogsQuery, (snapshot) => {
-        const logs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, type: 'bottling' }));
-        setBottlingLogs(logs);
-      }, (err) => console.error("Bottling Logs error:", err));
-      
-      return () => {
-        unsubscribeInventory();
-        unsubscribeRecipes();
-        unsubscribeBottlingMaterials();
-        unsubscribeDistillation();
-        unsubscribeBottling();
-      };
+    if (user) {
+      const paths = ['inventory', 'recipes', 'distillationLogs', 'bottlingLogs'];
+      const unsubscribers = paths.map(path => {
+        return onSnapshot(collection(db, 'artifacts', 'distillation-app', 'users', user.uid, path), (snapshot) => {
+          const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          if (path === 'inventory') setInventory(data);
+          if (path === 'recipes') setRecipes(data);
+          if (path === 'distillationLogs') setDistillationLogs(data.map(d => ({ ...d, type: 'distillation' })));
+          if (path === 'bottlingLogs') setBottlingLogs(data.map(d => ({ ...d, type: 'bottling' })));
+        });
+      });
+      return () => unsubscribers.forEach(unsub => unsub());
     }
-  }, [user, isAuthReady, appId]);
-  
+  }, [user]);
+
+  // Combined Logs Sorting
   useEffect(() => {
-    const combined = [...distillationLogs, ...bottlingLogs];
-    combined.sort((a, b) => new Date(b.date) - new Date(a.date));
+    const combined = [...distillationLogs, ...bottlingLogs].sort((a, b) => new Date(b.date) - new Date(a.date));
     setCombinedLogs(combined);
   }, [distillationLogs, bottlingLogs]);
 
-  const showNotification = (message) => {
-    setNotificationMessage(message);
+  // Auth Handlers
+  const handleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      if (ADMIN_EMAIL && result.user.email !== ADMIN_EMAIL) {
+        await signOut(auth);
+        setAuthError("Access Denied: Admin only.");
+      }
+    } catch (err) {
+      setAuthError("Login failed.");
+    }
+  };
+
+  const handleLogout = () => signOut(auth);
+
+  const showNotification = (msg) => {
+    setNotificationMessage(msg);
     setShowNotificationModal(true);
   };
-  
-  // AI Voice Dictation Feature for Distillation
-  const startDistillationListening = () => {
-    if (!('webkitSpeechRecognition' in window)) {
-      showNotification("Speech recognition is not supported in this browser. Please use Chrome.");
-      return;
-    }
-    const recognition = new window.webkitSpeechRecognition();
-    recognition.continuous = false;
-    recognition.lang = 'en-US';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.onstart = () => setIsListeningDistillation(true);
-    recognition.onresult = (event) => processDistillationDictation(event.results[0][0].transcript);
-    recognition.onerror = () => setIsListeningDistillation(false);
-    recognition.onend = () => setIsListeningDistillation(false);
-    recognition.start();
-  };
 
-  const processDistillationDictation = async (transcript) => {
-    setIsLoadingAIDistillation(true);
-    const prompt = `Parse dictation: "${transcript}" into JSON. Fields: distillationStart, headsCollectionStart, heartsCollectionStart, heartsCollectionStop, powerLevel (1-3.5), ethanolAmount, waterIntoStill, abvOfCharge, tailsDuration, distillateAmount, distillateABV, notes, lowerPlateOn, upperPlateOn, dephlegmatorOn.`;
-    
-    try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { responseMimeType: "application/json" }
-            })
-        });
-        const result = await response.json();
-        const jsonResult = JSON.parse(result.candidates[0].content.parts[0].text);
-        if (jsonResult) {
-            setDistillationForm(prev => ({ ...prev, ...jsonResult }));
-            showNotification("Fields updated!");
-        }
-    } catch (error) {
-        showNotification("Error processing speech.");
-    }
-    setIsLoadingAIDistillation(false);
-  };
-
-  // Logic to handle Inventory Add / Update
-  const handleAddInventory = async (e) => {
+  // Inventory Logic
+  const handleInventorySubmit = async (e) => {
     e.preventDefault();
     if (!user) return;
-
+    const data = {
+      ...inventoryForm,
+      quantity: parseFloat(inventoryForm.quantity),
+      lowStockThreshold: parseFloat(inventoryForm.lowStockThreshold),
+      leadTimeDays: parseInt(inventoryForm.leadTimeDays, 10)
+    };
     try {
-      const userId = user.uid;
-      const data = {
-        name: inventoryForm.name,
-        type: inventoryForm.type,
-        quantity: parseFloat(inventoryForm.quantity),
-        unit: inventoryForm.unit,
-        lowStockThreshold: parseFloat(inventoryForm.lowStockThreshold),
-        leadTimeDays: parseInt(inventoryForm.leadTimeDays, 10),
-      };
-
       if (editingInventoryId) {
-        await updateDoc(doc(db, 'artifacts', appId, 'users', userId, 'inventory', editingInventoryId), data);
-        showNotification("Inventory item updated!");
-        setEditingInventoryId(null);
+        await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', editingInventoryId), data);
+        showNotification("Item Updated");
       } else {
-        await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'inventory'), data);
-        showNotification("Inventory item added!");
+        await addDoc(collection(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory'), data);
+        showNotification("Item Added");
       }
-
-      setInventoryForm({
-        name: '',
-        type: 'ingredient',
-        quantity: '',
-        unit: '',
-        lowStockThreshold: '',
-        leadTimeDays: '',
-      });
-    } catch (e) {
-      console.error(e);
-      showNotification("Error saving inventory item.");
-    }
+      setInventoryForm({ name: '', type: 'ingredient', quantity: '', unit: '', lowStockThreshold: '', leadTimeDays: '' });
+      setEditingInventoryId(null);
+    } catch (err) { showNotification("Save failed"); }
   };
 
-  const startEditingInventory = (item) => {
-    setEditingInventoryId(item.id);
-    setInventoryForm({
-      name: item.name,
-      type: item.type,
-      quantity: item.quantity.toString(),
-      unit: item.unit,
-      lowStockThreshold: item.lowStockThreshold.toString(),
-      leadTimeDays: item.leadTimeDays.toString(),
-    });
-    // Scroll to form
-    window.scrollTo({ top: document.getElementById('inventory-form').offsetTop - 100, behavior: 'smooth' });
-  };
-
-  const handleRemoveInventory = async (itemId) => {
+  const deleteInventoryItem = async (id) => {
     if (!user) return;
-    try {
-      const userId = user.uid;
-      await deleteDoc(doc(db, 'artifacts', appId, 'users', userId, 'inventory', itemId));
-      showNotification("Inventory item deleted permanently.");
-      if (editingInventoryId === itemId) setEditingInventoryId(null);
-    } catch (e) {
-      showNotification("Error deleting inventory item.");
+    await deleteDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', id));
+    showNotification("Item Deleted Permanently");
+  };
+
+  // PDF Export
+  const exportPDF = () => {
+    const element = document.getElementById('logs-table');
+    if (window.html2pdf) {
+      window.html2pdf().from(element).save('distillery_logs.pdf');
+    } else {
+      showNotification("PDF Library Loading...");
     }
   };
 
-  const exportLogsToPDF = () => {
-    const table = document.getElementById('logs-table');
-    if (table && window.html2pdf) {
-      window.html2pdf(table, {
-        margin: 1,
-        filename: 'production_logs.pdf',
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' }
-      });
-      showNotification("Generating PDF...");
-    }
-  };
+  if (!isAuthReady) return <div className={tailwind}><LoaderCircle className="animate-spin mt-20" size={48} /></div>;
 
-  // Pagination Helpers
-  const totalPages = Math.ceil(combinedLogs.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const currentLogs = combinedLogs.slice(startIndex, startIndex + itemsPerPage);
-
-  const renderPagination = () => {
-    if (totalPages <= 1) return null;
+  if (!user) {
     return (
-      <div className="flex justify-center items-center mt-6 space-x-2">
-        <button 
-          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-          disabled={currentPage === 1}
-          className={`${paginationButton} disabled:opacity-30`}
-        ><ChevronLeft size={18} /></button>
-        <span className="text-[#4E3629] font-medium">Page {currentPage} of {totalPages}</span>
-        <button 
-          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-          disabled={currentPage === totalPages}
-          className={`${paginationButton} disabled:opacity-30`}
-        ><ChevronRight size={18} /></button>
+      <div className={tailwind}>
+        <div className={card + " text-center mt-20"}>
+          <h2 className="text-2xl font-bold mb-6">Distillery App Login</h2>
+          <button onClick={handleLogin} className={button + " w-full flex items-center justify-center gap-2"}>
+            <LogIn size={20} /> Sign in with Google
+          </button>
+          {authError && <p className="text-red-600 mt-4 text-sm">{authError}</p>}
+        </div>
       </div>
     );
-  };
+  }
+
+  const currentLogs = combinedLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className={tailwind}>
-      <header className="w-full max-w-4xl mb-8">
-        <nav className="flex bg-[#E0D8D0] rounded-2xl p-2 shadow-xl overflow-x-auto">
-          <button onClick={() => setView('dashboard')} className={`${tabButton} ${view === 'dashboard' ? activeTab : inactiveTab}`}>
-            <Home size={20} className="inline mr-2" />Dashboard
+      <header className="w-full max-w-4xl mb-8 flex flex-col gap-4">
+        <div className="flex justify-between items-center bg-[#E0D8D0] p-4 rounded-2xl shadow-md">
+          <span className="font-bold text-[#8A2A2B]">Logged in as: {user.email}</span>
+          <button onClick={handleLogout} className="text-red-800 hover:underline flex items-center gap-1 text-sm font-bold">
+            <LogOut size={16} /> Logout
           </button>
-          <button onClick={() => setView('distillation')} className={`${tabButton} ${view === 'distillation' ? activeTab : inactiveTab}`}>
-            <FlaskConical size={20} className="inline mr-2" />Distillation
-          </button>
-          <button onClick={() => setView('bottling')} className={`${tabButton} ${view === 'bottling' ? activeTab : inactiveTab}`}>
-            <GlassWater size={20} className="inline mr-2" />Bottling
-          </button>
-          <button onClick={() => setView('logs')} className={`${tabButton} ${view === 'logs' ? activeTab : inactiveTab}`}>
-            <List size={20} className="inline mr-2" />Logs
-          </button>
-          <button onClick={() => setView('inventory')} className={`${tabButton} ${view === 'inventory' ? activeTab : inactiveTab}`}>
-            <Archive size={20} className="inline mr-2" />Inventory
-          </button>
+        </div>
+        <nav className="flex bg-[#E0D8D0] rounded-2xl p-2 shadow-xl overflow-x-auto gap-1">
+          <button onClick={() => setView('dashboard')} className={`${tabButton} ${view === 'dashboard' ? activeTab : inactiveTab}`}><Home size={18} className="mr-1"/>Home</button>
+          <button onClick={() => setView('distillation')} className={`${tabButton} ${view === 'distillation' ? activeTab : inactiveTab}`}><FlaskConical size={18} className="mr-1"/>Logs</button>
+          <button onClick={() => setView('inventory')} className={`${tabButton} ${view === 'inventory' ? activeTab : inactiveTab}`}><Archive size={18} className="mr-1"/>Stock</button>
+          <button onClick={() => setView('logHistory')} className={`${tabButton} ${view === 'logHistory' ? activeTab : inactiveTab}`}><List size={18} className="mr-1"/>History</button>
         </nav>
       </header>
-      
+
       <main className="w-full max-w-4xl">
-        {!isAuthReady ? (
-           <div className={`${card} text-center`}>
-            <LoaderCircle size={48} className={`${loadingSpinner} mx-auto mb-4`} />
-            <p className="text-xl text-[#4E3629]">Connecting to Distillery Cloud...</p>
+        {view === 'dashboard' && (
+          <div className={card}>
+            <h1 className="text-3xl font-black mb-4 text-[#8A2A2B] text-center">Dashboard</h1>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              <div className="bg-[#8A2A2B] p-4 rounded-xl text-white text-center">
+                <p className="text-2xl font-bold">{inventory.length}</p>
+                <p className="text-xs uppercase">Stock Items</p>
+              </div>
+              <div className="bg-[#8A2A2B] p-4 rounded-xl text-white text-center">
+                <p className="text-2xl font-bold">{distillationLogs.length}</p>
+                <p className="text-xs uppercase">Total Runs</p>
+              </div>
+            </div>
+            {inventory.some(i => i.quantity <= i.lowStockThreshold) && (
+              <div className={notificationBox}>
+                <h3 className="font-bold mb-2">Stock Alerts:</h3>
+                {inventory.filter(i => i.quantity <= i.lowStockThreshold).map(i => (
+                  <div key={i.id} className="text-sm">⚠️ {i.name} is low: {i.quantity} {i.unit} left.</div>
+                ))}
+              </div>
+            )}
           </div>
-        ) : (
-          <>
-            {view === 'dashboard' && (
-              <>
-                <div className={`${card} text-center`}>
-                  <h1 className="text-4xl font-extrabold mb-4 text-[#8A2A2B]">Distillery Dashboard</h1>
-                  <p className="text-lg text-[#4E3629] mb-6">Real-time production and stock tracking.</p>
-                  <div className="flex justify-center items-center flex-wrap gap-4">
-                    <div className="p-4 bg-[#8A2A2B] rounded-xl shadow-lg min-w-[120px]">
-                      <p className="text-2xl font-bold text-[#F4EFEA]">{distillationLogs.length}</p>
-                      <p className="text-xs text-[#F4EFEA] uppercase tracking-wider">Distillations</p>
-                    </div>
-                    <div className="p-4 bg-[#8A2A2B] rounded-xl shadow-lg min-w-[120px]">
-                      <p className="text-2xl font-bold text-[#F4EFEA]">{bottlingLogs.length}</p>
-                      <p className="text-xs text-[#F4EFEA] uppercase tracking-wider">Bottlings</p>
-                    </div>
-                    <div className="p-4 bg-[#8A2A2B] rounded-xl shadow-lg min-w-[120px]">
-                      <p className="text-2xl font-bold text-[#F4EFEA]">{inventory.length}</p>
-                      <p className="text-xs text-[#F4EFEA] uppercase tracking-wider">Stock Items</p>
-                    </div>
-                  </div>
-                </div>
+        )}
 
-                <div className={card}>
-                  <h2 className="text-2xl font-bold mb-4 flex items-center">
-                    <Archive size={24} className="mr-2 text-[#8A2A2B]" /> Stock Alerts
-                  </h2>
-                  {inventory.filter(item => item.quantity <= item.lowStockThreshold).length > 0 ? (
-                    <div className="space-y-2">
-                      <div className={notificationBox}>
-                        <p className="font-bold">Low Stock Warning</p>
-                        <p className="text-sm">The following items require immediate re-ordering.</p>
-                      </div>
-                      {inventory.filter(item => item.quantity <= item.lowStockThreshold).map(item => (
-                        <div key={item.id} className={lowStockItem}>
-                          <span className="font-bold">{item.name}</span>
-                          <span className="bg-[#8A2A2B] text-white px-3 py-1 rounded-lg text-sm">
-                            {item.quantity} / {item.lowStockThreshold} {item.unit}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="bg-green-700/20 border border-green-700 text-green-900 p-4 rounded-xl text-center font-medium">
-                      All inventory levels are optimal.
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-
-            {view === 'inventory' && (
-              <div className={card}>
-                <h2 className="text-2xl font-bold mb-6 flex items-center text-[#8A2A2B]">
-                  <Archive size={24} className="mr-2 text-[#8A2A2B]" /> Inventory Management
-                </h2>
-                
-                <div className="overflow-x-auto mb-8">
-                  <table className="min-w-full bg-[#E0D8D0] rounded-xl overflow-hidden shadow-inner">
-                    <thead className={tableHeader}>
-                      <tr>
-                        <th className="py-3 px-4">Item</th>
-                        <th className="py-3 px-4">Type</th>
-                        <th className="py-3 px-4">Current Stock</th>
-                        <th className="py-3 px-4">Threshold</th>
-                        <th className="py-3 px-4 text-center">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {inventory.length === 0 ? (
-                        <tr><td colSpan="5" className="p-8 text-center text-[#4E3629]/60 italic">No inventory items found.</td></tr>
-                      ) : (
-                        inventory.map(item => (
-                          <tr key={item.id} className={tableRow}>
-                            <td className="py-3 px-4 font-semibold">{item.name}</td>
-                            <td className="py-3 px-4 capitalize">{item.type.replace('_', ' ')}</td>
-                            <td className={`py-3 px-4 font-bold ${item.quantity <= item.lowStockThreshold ? 'text-red-700' : ''}`}>
-                              {item.quantity} {item.unit}
-                            </td>
-                            <td className="py-3 px-4 opacity-70">{item.lowStockThreshold} {item.unit}</td>
-                            <td className="py-3 px-4 flex justify-center space-x-3">
-                              <button 
-                                onClick={() => startEditingInventory(item)}
-                                className="p-2 bg-blue-600/10 text-blue-800 rounded-lg hover:bg-blue-600 hover:text-white transition-colors"
-                                title="Edit Item"
-                              >
-                                <Pencil size={18} />
-                              </button>
-                              <button 
-                                onClick={() => handleRemoveInventory(item.id)}
-                                className="p-2 bg-red-600/10 text-red-800 rounded-lg hover:bg-red-600 hover:text-white transition-colors"
-                                title="Delete Permanently"
-                              >
-                                <Trash2 size={18} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div id="inventory-form" className="p-6 bg-[#C8C2BA] rounded-2xl border-2 border-[#8A2A2B]/20">
-                  <h3 className="text-xl font-bold mb-4 flex items-center text-[#8A2A2B]">
-                    {editingInventoryId ? <><Pencil size={20} className="mr-2" /> Update Item</> : <><Plus size={20} className="mr-2" /> Add New Item</>}
-                  </h3>
-                  <form onSubmit={handleAddInventory} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Item Name</label>
-                        <input type="text" placeholder="e.g. Botanicals, Glass 750ml" value={inventoryForm.name} onChange={(e) => setInventoryForm({ ...inventoryForm, name: e.target.value })} required className={inputField} />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Category</label>
-                        <select value={inventoryForm.type} onChange={(e) => setInventoryForm({ ...inventoryForm, type: e.target.value })} className={inputField}>
-                          <option value="ingredient">Ingredient</option>
-                          <option value="bottling_material">Bottling Material</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Quantity</label>
-                        <input type="number" placeholder="0" value={inventoryForm.quantity} onChange={(e) => setInventoryForm({ ...inventoryForm, quantity: e.target.value })} required className={inputField} />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Unit</label>
-                        <input type="text" placeholder="kg, L, pcs" value={inventoryForm.unit} onChange={(e) => setInventoryForm({ ...inventoryForm, unit: e.target.value })} required className={inputField} />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Min Threshold</label>
-                        <input type="number" placeholder="Alert at..." value={inventoryForm.lowStockThreshold} onChange={(e) => setInventoryForm({ ...inventoryForm, lowStockThreshold: e.target.value })} required className={inputField} />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Lead Days</label>
-                        <input type="number" placeholder="Order to arrival" value={inventoryForm.leadTimeDays} onChange={(e) => setInventoryForm({ ...inventoryForm, leadTimeDays: e.target.value })} required className={inputField} />
-                      </div>
-                    </div>
-                    <div className="flex gap-4">
-                      <button type="submit" className={`${button} flex-1`}>
-                        {editingInventoryId ? 'Update Inventory' : 'Add to Inventory'}
-                      </button>
-                      {editingInventoryId && (
-                        <button 
-                          type="button" 
-                          onClick={() => {
-                            setEditingInventoryId(null);
-                            setInventoryForm({ name: '', type: 'ingredient', quantity: '', unit: '', lowStockThreshold: '', leadTimeDays: '' });
-                          }}
-                          className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-xl transition-all"
-                        >
-                          <X size={24} />
-                        </button>
-                      )}
-                    </div>
-                  </form>
-                </div>
+        {view === 'inventory' && (
+          <div className={card}>
+            <h2 className="text-2xl font-bold mb-6 flex items-center text-[#8A2A2B] gap-2"><Archive /> Stock Management</h2>
+            <div className="overflow-x-auto mb-8 bg-white/30 rounded-xl p-2 shadow-inner">
+              <table className="w-full">
+                <thead><tr className={tableHeader}><th className="p-3">Item</th><th className="p-3">Stock</th><th className="p-3 text-center">Actions</th></tr></thead>
+                <tbody>
+                  {inventory.map(item => (
+                    <tr key={item.id} className={tableRow}>
+                      <td className="p-3 font-medium">{item.name}</td>
+                      <td className={`p-3 font-bold ${item.quantity <= item.lowStockThreshold ? 'text-red-700' : ''}`}>{item.quantity} {item.unit}</td>
+                      <td className="p-3 flex justify-center gap-2">
+                        <button onClick={() => {setEditingInventoryId(item.id); setInventoryForm(item);}} className="p-2 text-blue-700 hover:bg-blue-100 rounded-lg"><Pencil size={18}/></button>
+                        <button onClick={() => deleteInventoryItem(item.id)} className="p-2 text-red-700 hover:bg-red-100 rounded-lg"><Trash2 size={18}/></button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <form onSubmit={handleInventorySubmit} className="bg-[#C8C2BA] p-6 rounded-2xl border-2 border-[#8A2A2B]/20 space-y-4">
+              <h3 className="font-bold text-[#8A2A2B]">{editingInventoryId ? "Update Item" : "Add New Item"}</h3>
+              <input type="text" placeholder="Item Name" value={inventoryForm.name} onChange={e => setInventoryForm({...inventoryForm, name: e.target.value})} className={inputField} required />
+              <div className="grid grid-cols-2 gap-4">
+                <input type="number" placeholder="Quantity" value={inventoryForm.quantity} onChange={e => setInventoryForm({...inventoryForm, quantity: e.target.value})} className={inputField} required />
+                <input type="text" placeholder="Unit (kg, L)" value={inventoryForm.unit} onChange={e => setInventoryForm({...inventoryForm, unit: e.target.value})} className={inputField} required />
               </div>
-            )}
-
-            {/* Other views (Distillation, Bottling, Logs) remain integrated with full data access */}
-            {view === 'distillation' && (
-               <div className={card}>
-                <h2 className="text-2xl font-bold mb-6 flex items-center justify-between text-[#8A2A2B]">
-                  <span className="flex items-center"><FlaskConical size={24} className="mr-2 text-[#8A2A2B]" /> New Distillation Log</span>
-                  <button
-                    type="button"
-                    onClick={startDistillationListening}
-                    className={`${micButton} ${isListeningDistillation ? 'bg-red-600' : 'bg-[#4E3629]'}`}
-                    disabled={isLoadingAIDistillation}
-                  >
-                    {isLoadingAIDistillation ? <LoaderCircle size={24} className={loadingSpinner} /> : isListeningDistillation ? <MicOff size={24} /> : <Mic size={24} />}
-                  </button>
-                </h2>
-                <form onSubmit={handleDistillationSubmit} className="space-y-4">
-                  <div>
-                    <label className="block text-[#4E3629] mb-2 font-bold uppercase text-xs opacity-70 ml-1">Time of Distillation</label>
-                    <input type="datetime-local" value={distillationForm.date} onChange={(e) => setDistillationForm({ ...distillationForm, date: e.target.value })} required className={inputField} />
-                  </div>
-                  <div>
-                    <label className="block text-[#4E3629] mb-2 font-bold uppercase text-xs opacity-70 ml-1">Recipe Used</label>
-                    <select value={distillationForm.recipeName} onChange={(e) => setDistillationForm({ ...distillationForm, recipeName: e.target.value })} required className={inputField}>
-                      <option value="">Select a Recipe</option>
-                      {recipes.map(recipe => (
-                        <option key={recipe.id} value={recipe.name}>{recipe.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {/* ... other form fields ... */}
-                  <button type="submit" className={button}>Submit Distillation Log</button>
-                </form>
+              <div className="grid grid-cols-2 gap-4">
+                <input type="number" placeholder="Alert at..." value={inventoryForm.lowStockThreshold} onChange={e => setInventoryForm({...inventoryForm, lowStockThreshold: e.target.value})} className={inputField} required />
+                <input type="number" placeholder="Lead Days" value={inventoryForm.leadTimeDays} onChange={e => setInventoryForm({...inventoryForm, leadTimeDays: e.target.value})} className={inputField} required />
               </div>
-            )}
-
-            {view === 'logs' && (
-              <div className={card}>
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-bold flex items-center text-[#8A2A2B]">
-                    <List size={24} className="mr-2 text-[#8A2A2B]" /> Production Log History
-                  </h2>
-                  <button onClick={exportLogsToPDF} className={`${button} flex items-center text-sm px-4`}>
-                    <FileDown size={20} className="mr-2" /> PDF Export
-                  </button>
-                </div>
-                <div className="overflow-x-auto" id="logs-table">
-                  <table className="min-w-full bg-[#E0D8D0] rounded-xl overflow-hidden shadow-inner">
-                    <thead className={tableHeader}>
-                      <tr className="text-left">
-                        <th className={tableCell}>Log Type</th>
-                        <th className={tableCell}>Date</th>
-                        <th className={tableCell}>Time</th>
-                        <th className={tableCell}>Product</th>
-                        <th className={tableCell}>Result</th>
-                        <th className={tableCell}>ABV/Lot</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {currentLogs.map(log => (
-                        <tr key={log.id} className={tableRow}>
-                          <td className={tableCell}>
-                            <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${log.type === 'distillation' ? 'bg-[#8A2A2B] text-white' : 'bg-amber-800 text-white'}`}>
-                              {log.type}
-                            </span>
-                          </td>
-                          <td className={tableCell}>{new Date(log.date).toLocaleDateString()}</td>
-                          <td className={tableCell}>{log.type === 'distillation' ? log.distillationStart : log.bottlingStartTime}</td>
-                          <td className={tableCell}>{log.type === 'distillation' ? log.recipeName : log.product}</td>
-                          <td className={tableCell}>
-                            {log.type === 'distillation' ? `${log.distillateAmount} L` : `${log.bottledAmount} units`}
-                          </td>
-                          <td className={tableCell}>
-                            {log.type === 'distillation' ? `${log.distillateABV}%` : log.lotNumber}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {renderPagination()}
+              <div className="flex gap-2">
+                <button type="submit" className={button + " flex-1"}>{editingInventoryId ? "Save Changes" : "Add to Stock"}</button>
+                {editingInventoryId && <button type="button" onClick={() => {setEditingInventoryId(null); setInventoryForm({name:'', type:'ingredient', quantity:'', unit:'', lowStockThreshold:'', leadTimeDays:''});}} className="bg-gray-500 text-white p-3 rounded-xl"><X /></button>}
               </div>
-            )}
-          </>
+            </form>
+          </div>
+        )}
+
+        {view === 'logHistory' && (
+          <div className={card}>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-[#8A2A2B]">Run History</h2>
+              <button onClick={exportPDF} className="p-2 bg-[#4E3629] text-white rounded-lg flex items-center gap-2 text-sm"><FileDown size={18}/> Export PDF</button>
+            </div>
+            <div className="overflow-x-auto" id="logs-table">
+              <table className="w-full bg-white/20 rounded-xl overflow-hidden">
+                <thead className={tableHeader}><tr className="text-xs uppercase opacity-70"><th className="p-3">Type</th><th className="p-3">Date</th><th className="p-3">Product</th><th className="p-3">Result</th></tr></thead>
+                <tbody>
+                  {currentLogs.map(log => (
+                    <tr key={log.id} className={tableRow}>
+                      <td className="p-3"><span className="text-[10px] font-bold bg-[#8A2A2B] text-white px-2 py-0.5 rounded-full">{log.type}</span></td>
+                      <td className="p-3">{new Date(log.date).toLocaleDateString()}</td>
+                      <td className="p-3 font-bold">{log.recipeName || log.product}</td>
+                      <td className="p-3">{log.distillateAmount || log.bottledAmount} {log.type === 'distillation' ? 'L' : 'Units'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-between mt-4">
+              <button onClick={() => setCurrentPage(p => Math.max(1, p-1))} disabled={currentPage === 1} className="p-2 opacity-50"><ChevronLeft/></button>
+              <span className="text-sm font-bold">Page {currentPage} of {Math.ceil(combinedLogs.length / itemsPerPage)}</span>
+              <button onClick={() => setCurrentPage(p => Math.min(Math.ceil(combinedLogs.length/itemsPerPage), p+1))} disabled={currentPage >= Math.ceil(combinedLogs.length/itemsPerPage)} className="p-2 opacity-50"><ChevronRight/></button>
+            </div>
+          </div>
         )}
       </main>
 
-      {/* Notification Modal */}
       {showNotificationModal && (
-        <div className="fixed inset-0 bg-[#4E3629]/90 flex items-center justify-center p-4 z-50">
-          <div className="bg-[#E0D8D0] p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center border-t-8 border-[#8A2A2B]">
-            <h3 className="text-2xl font-bold mb-4 text-[#4E3629]">Notification</h3>
-            <p className="text-lg text-[#4E3629] mb-8 leading-relaxed">{notificationMessage}</p>
-            <button type="button" onClick={() => setShowNotificationModal(false)} className={button + " w-full"}>Dismiss</button>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-[#F4EFEA] p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center border-t-8 border-[#8A2A2B]">
+            <p className="text-lg font-bold mb-6">{notificationMessage}</p>
+            <button onClick={() => setShowNotificationModal(false)} className={button + " w-full"}>Got it</button>
           </div>
         </div>
       )}

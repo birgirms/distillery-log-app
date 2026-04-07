@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, addDoc, onSnapshot, collection, query, updateDoc, deleteDoc } from 'firebase/firestore';
-import { Archive, FlaskConical, GlassWater, NotebookPen, Home, Plus, Trash2, LoaderCircle, List, ChevronLeft, ChevronRight, FileDown, Pencil, X, LogIn, LogOut } from 'lucide-react';
+import { Archive, FlaskConical, GlassWater, NotebookPen, Home, Plus, Trash2, LoaderCircle, List, ChevronLeft, ChevronRight, FileDown, Pencil, X, LogIn, LogOut, ChevronDown, ChevronUp } from 'lucide-react';
 
 // Tailwind CSS classes for consistent UI
 const tailwind = "bg-[#F4EFEA] text-[#4E3629] min-h-screen p-8 font-sans transition-all duration-300 flex flex-col items-center";
@@ -117,6 +117,9 @@ export default function App() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  
+  const [historyFilter, setHistoryFilter] = useState('All');
+  const [expandedLogId, setExpandedLogId] = useState(null);
 
   // --- UNIT CONVERSION HELPER ---
   const convertQuantity = (qty, fromUnit, toUnit) => {
@@ -492,8 +495,15 @@ export default function App() {
     );
   }
 
-  const currentLogs = combinedLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  const totalPages = Math.ceil(combinedLogs.length / itemsPerPage);
+  const filteredLogs = combinedLogs.filter(log => {
+    if (historyFilter === 'All') return true;
+    const name = log.recipeName || log.product;
+    return name === historyFilter;
+  });
+
+  const currentLogs = filteredLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);
+  const uniqueFilters = Array.from(new Set(combinedLogs.map(l => l.recipeName || l.product).filter(Boolean)));
 
   return (
     <div className={tailwind}>
@@ -872,37 +882,86 @@ export default function App() {
         {view === 'logHistory' && (
           <div className={card}>
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-[#8A2A2B]">Batch History</h2>
+              <div className="flex items-center gap-4">
+                <h2 className="text-2xl font-bold text-[#8A2A2B]">Batch History</h2>
+                <select
+                  value={historyFilter}
+                  onChange={(e) => { setHistoryFilter(e.target.value); setCurrentPage(1); setExpandedLogId(null); }}
+                  className="bg-[#C8C2BA]/50 text-[#4E3629] p-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8A2A2B] font-semibold text-sm cursor-pointer border border-[#B5AE9F]"
+                >
+                  <option value="All">All Recipes & Products</option>
+                  {uniqueFilters.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+              </div>
               <button onClick={exportPDF} className="p-2 bg-[#4E3629] text-white rounded-lg flex items-center gap-2 text-xs font-bold"><FileDown size={16}/> EXPORT PDF</button>
             </div>
             <div className="overflow-x-auto" id="logs-table">
               <table className="w-full bg-white/40 rounded-xl overflow-hidden shadow-inner border border-[#B5AE9F]">
                 <thead className={tableHeader}>
                   <tr className="text-[10px] uppercase tracking-tighter">
-                    <th className="p-3">Type</th><th className="p-3">Date</th><th className="p-3">Recipe/Product</th><th className="p-3">Yield</th><th className="p-3">ABV/Lot</th><th className="p-3 text-center">Manage</th>
+                    <th className="p-4">Type</th><th className="p-4">Date</th><th className="p-4">Recipe/Product</th><th className="p-4">Yield</th><th className="p-4">ABV/Lot</th><th className="p-4 text-right">Manage</th>
                   </tr>
                 </thead>
                 <tbody>
                   {currentLogs.map(log => (
-                    <tr key={log.id} className={tableRow}>
-                      <td className="p-3"><span className={`text-[9px] font-black ${log.type === 'distillation' ? 'bg-[#8A2A2B]' : 'bg-[#4E3629]'} text-white px-2 py-0.5 rounded-full`}>{log.type.toUpperCase()}</span></td>
-                      <td className="p-3 text-xs">{new Date(log.date).toLocaleDateString()}</td>
-                      <td className="p-3 font-bold text-sm">{log.recipeName || log.product}</td>
-                      <td className="p-3 text-sm">{log.distillateAmount || log.bottledAmount} {log.type === 'distillation' ? 'L' : 'U'}</td>
-                      <td className="p-3 text-sm">{log.distillateABV ? log.distillateABV + '%' : log.lotNumber || '-'}</td>
-                      <td className="p-3 flex justify-center gap-3">
-                        <button type="button" onClick={() => startEditingLog(log)} className="p-2 text-blue-700 hover:bg-blue-100 rounded-lg"><Pencil size={18}/></button>
-                        <button type="button" onClick={() => deleteLogItem(log)} className="p-2 text-red-700 hover:bg-red-100 rounded-lg"><Trash2 size={18}/></button>
-                      </td>
-                    </tr>
+                    <React.Fragment key={log.id}>
+                      <tr 
+                        className={`${tableRow} cursor-pointer hover:bg-[#C8C2BA]/60 transition-all ${expandedLogId === log.id ? 'bg-[#C8C2BA]/40' : ''}`}
+                        onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
+                      >
+                        <td className="p-4"><span className={`text-[9px] font-black ${log.type === 'distillation' ? 'bg-[#8A2A2B]' : 'bg-[#4E3629]'} text-white px-2 py-1 rounded-full`}>{log.type.toUpperCase()}</span></td>
+                        <td className="p-4 text-xs font-medium">{new Date(log.date).toLocaleDateString()}</td>
+                        <td className="p-4 font-bold text-sm">{log.recipeName || log.product}</td>
+                        <td className="p-4 text-sm font-medium">{log.distillateAmount || log.bottledAmount} {log.type === 'distillation' ? 'L' : 'U'}</td>
+                        <td className="p-4 text-sm font-medium">{log.distillateABV ? log.distillateABV + '%' : log.lotNumber || '-'}</td>
+                        <td className="p-4 flex justify-end gap-2 items-center">
+                          <button type="button" onClick={(e) => { e.stopPropagation(); startEditingLog(log); }} className="p-2 text-blue-700 hover:bg-blue-200 rounded-lg transition-colors"><Pencil size={18}/></button>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); deleteLogItem(log); }} className="p-2 text-red-700 hover:bg-red-200 rounded-lg transition-colors"><Trash2 size={18}/></button>
+                          {expandedLogId === log.id ? <ChevronUp size={20} className="text-[#4E3629] ml-2"/> : <ChevronDown size={20} className="text-[#4E3629] ml-2"/>}
+                        </td>
+                      </tr>
+                      {expandedLogId === log.id && (
+                        <tr className="bg-[#E0D8D0] border-b-2 border-[#B5AE9F] shadow-inner">
+                          <td colSpan="6" className="p-6">
+                            {log.type === 'distillation' ? (
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-y-4 gap-x-8 text-sm text-[#4E3629]">
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Start Time</span> {log.distillationStart || '-'}</div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Power Level</span> {log.powerLevel || '-'}</div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Ethanol Into Still</span> {log.ethanolAmount || '0'} L</div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Water Into Still</span> {log.waterIntoStill || '0'} L</div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Heads Start</span> {log.headsCollectionStart || '-'}</div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Hearts Start</span> {log.heartsCollectionStart || '-'}</div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Hearts Stop</span> {log.heartsCollectionStop || '-'}</div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Tails Duration</span> {log.tailsDuration || '0'} min</div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Lower Plate</span> {log.lowerPlateOn ? 'ON' : 'OFF'}</div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Upper Plate</span> {log.upperPlateOn ? 'ON' : 'OFF'}</div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Dephlegmator</span> {log.dephlegmatorOn ? 'ON' : 'OFF'}</div>
+                                <div className="col-span-2 md:col-span-4 mt-2 pt-2 border-t border-[#B5AE9F]/30"><span className="block text-[10px] uppercase font-bold opacity-60">Notes</span> <span className="italic">{log.notes || 'No notes provided.'}</span></div>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm text-[#4E3629]">
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Bottling Time</span> {log.bottlingStartTime || '-'}</div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Boxes Used</span> {log.boxesUsed || '0'}</div>
+                                <div className="col-span-2 mt-2 pt-2 border-t border-[#B5AE9F]/30"><span className="block text-[10px] uppercase font-bold opacity-60">Notes</span> <span className="italic">{log.notes || 'No notes provided.'}</span></div>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   ))}
+                  {currentLogs.length === 0 && (
+                    <tr>
+                      <td colSpan="6" className="p-8 text-center text-[#4E3629]/60 italic font-medium">No logs found for this selection.</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
             <div className="flex justify-between items-center mt-6 bg-[#C8C2BA]/50 p-2 rounded-xl">
-              <button onClick={() => setCurrentPage(p => Math.max(1, p-1))} disabled={currentPage === 1} className="p-2 disabled:opacity-20 bg-white/50 rounded-lg"><ChevronLeft size={20}/></button>
+              <button onClick={() => setCurrentPage(p => Math.max(1, p-1))} disabled={currentPage === 1} className="p-2 disabled:opacity-20 bg-white/50 rounded-lg transition-opacity"><ChevronLeft size={20}/></button>
               <span className="text-xs font-black uppercase tracking-widest text-[#8A2A2B]">Page {currentPage} / {totalPages || 1}</span>
-              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p+1))} disabled={currentPage >= totalPages} className="p-2 disabled:opacity-20 bg-white/50 rounded-lg"><ChevronRight size={20}/></button>
+              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p+1))} disabled={currentPage >= totalPages || totalPages === 0} className="p-2 disabled:opacity-20 bg-white/50 rounded-lg transition-opacity"><ChevronRight size={20}/></button>
             </div>
           </div>
         )}

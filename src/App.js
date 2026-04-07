@@ -310,13 +310,45 @@ export default function App() {
     }
   };
 
-  const deleteLogItem = async (id, type) => {
+  const deleteLogItem = async (log) => {
     if (!user) return;
-    if (window.confirm("Are you sure you want to permanently delete this batch log? (Inventory will not be automatically restocked)")) {
+    if (window.confirm("Are you sure you want to permanently delete this batch log? The materials/ingredients used will be returned to your inventory.")) {
       try {
-        const path = type === 'distillation' ? 'distillationLogs' : 'bottlingLogs';
-        await deleteDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, path, id));
-        showNotification("Batch Log Deleted.");
+        const path = log.type === 'distillation' ? 'distillationLogs' : 'bottlingLogs';
+        
+        // Restore inventory based on the log type before deleting
+        if (log.type === 'distillation') {
+          const recipe = recipes.find(r => r.name === log.recipeName);
+          if (recipe) {
+            for (const ingredient of recipe.ingredients) {
+              const invItem = inventory.find(i => i.name === ingredient.name);
+              if (invItem) {
+                const restoredQuantity = (invItem.quantity || 0) + (parseFloat(ingredient.quantity) || 0);
+                await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), {
+                  quantity: restoredQuantity,
+                });
+              }
+            }
+          }
+        } else if (log.type === 'bottling') {
+          const matDef = bottlingMaterialDefinitions.find(def => def.name === log.product);
+          if (matDef) {
+            for (const mat of matDef.materials) {
+              const invItem = inventory.find(item => item.name === mat.name && item.type === 'bottling_material');
+              if (invItem) {
+                const deductionAmount = (parseFloat(mat.quantity) || 0) * (parseInt(log.bottledAmount, 10) || 0);
+                const restoredQuantity = (invItem.quantity || 0) + deductionAmount;
+                await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), {
+                  quantity: restoredQuantity,
+                });
+              }
+            }
+          }
+        }
+
+        // Delete the actual log document
+        await deleteDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, path, log.id));
+        showNotification("Batch Log Deleted and Inventory Restocked.");
       } catch(err) {
         console.error("Delete Error:", err);
         showNotification(`Error deleting log: ${err.message}`);
@@ -744,7 +776,7 @@ export default function App() {
                       <td className="p-3 text-sm">{log.distillateABV ? log.distillateABV + '%' : log.lotNumber || '-'}</td>
                       <td className="p-3 flex justify-center gap-3">
                         <button type="button" onClick={() => startEditingLog(log)} className="p-2 text-blue-700 hover:bg-blue-100 rounded-lg"><Pencil size={18}/></button>
-                        <button type="button" onClick={() => deleteLogItem(log.id, log.type)} className="p-2 text-red-700 hover:bg-red-100 rounded-lg"><Trash2 size={18}/></button>
+                        <button type="button" onClick={() => deleteLogItem(log)} className="p-2 text-red-700 hover:bg-red-100 rounded-lg"><Trash2 size={18}/></button>
                       </td>
                     </tr>
                   ))}

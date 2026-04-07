@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, addDoc, onSnapshot, collection, query, updateDoc, deleteDoc } from 'firebase/firestore';
-import { Archive, FlaskConical, GlassWater, NotebookPen, Home, Plus, Trash2, Mic, MicOff, LoaderCircle, List, ChevronLeft, ChevronRight, FileDown, Pencil, X, LogIn, LogOut } from 'lucide-react';
+import { Archive, FlaskConical, GlassWater, NotebookPen, Home, Plus, Trash2, LoaderCircle, List, ChevronLeft, ChevronRight, FileDown, Pencil, X, LogIn, LogOut } from 'lucide-react';
 
 // Tailwind CSS classes for consistent UI
 const tailwind = "bg-[#F4EFEA] text-[#4E3629] min-h-screen p-8 font-sans transition-all duration-300 flex flex-col items-center";
@@ -14,13 +14,10 @@ const activeTab = "bg-[#8A2A2B] text-[#F4EFEA] shadow-lg";
 const inactiveTab = "bg-[#E0D8D0] text-[#4E3629] hover:bg-[#C8C2BA]";
 const notificationBox = "bg-red-700 text-white p-4 rounded-xl mb-4";
 const lowStockItem = "flex justify-between items-center bg-[#C8C2BA] p-3 rounded-xl mb-2";
-const micButton = "bg-[#4E3629] hover:bg-[#8A2A2B] text-[#F4EFEA] font-bold p-3 rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-110 flex items-center justify-center";
-const loadingSpinner = "animate-spin text-[#F4EFEA]";
 const tableHeader = "bg-[#C8C2BA] text-left text-[#4E3629] font-semibold";
 const tableRow = "border-t border-[#B5AE9F] hover:bg-[#C8C2BA] transition-colors";
 const tableCell = "py-3 px-4 text-sm";
 const paginationButton = "px-4 py-2 mx-1 rounded-full bg-[#C8C2BA] hover:bg-[#8A2A2B] hover:text-[#F4EFEA] text-[#4E3629]";
-const activePageButton = "bg-[#8A2A2B] text-[#F4EFEA]";
 
 // Firebase configuration with your exact API Key
 const firebaseConfig = {
@@ -87,11 +84,6 @@ export default function App() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-
-  const [isListeningDistillation, setIsListeningDistillation] = useState(false);
-  const [isLoadingAIDistillation, setIsLoadingAIDistillation] = useState(false);
-  const [isListeningBottling, setIsListeningBottling] = useState(false);
-  const [isLoadingAIBottling, setIsLoadingAIBottling] = useState(false);
 
   // --- AUTH LISTENER ---
   useEffect(() => {
@@ -368,193 +360,6 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-
-  // --- AI DICTATION PROCESSING ---
-  const processDistillationDictation = async (transcript) => {
-    setIsLoadingAIDistillation(true);
-    
-    const promptText = `Extract distillation log details from this dictation: "${transcript}". Return a JSON object ONLY with the fields that are explicitly mentioned or clearly implied. Omit any unmentioned fields entirely. Map the mentioned spirit/recipe to 'recipeName'. Map times to 'distillationStart', 'headsCollectionStart', 'heartsCollectionStart', 'heartsCollectionStop' in 'HH:MM' format. Map liters collected to 'distillateAmount'. Map percentage/proof to 'distillateABV'. Map power level to 'powerLevel'. For boolean fields (lowerPlateOn, upperPlateOn, dephlegmatorOn), set true if turned on/active, false if off/deactivated.`;
-
-    const payload = {
-      contents: [{ parts: [{ text: promptText }] }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "OBJECT",
-          properties: {
-            recipeName: { type: "STRING" },
-            distillationStart: { type: "STRING" },
-            powerLevel: { type: "STRING" },
-            ethanolAmount: { type: "NUMBER" },
-            waterIntoStill: { type: "NUMBER" },
-            abvOfCharge: { type: "NUMBER" },
-            headsCollectionStart: { type: "STRING" },
-            heartsCollectionStart: { type: "STRING" },
-            heartsCollectionStop: { type: "STRING" },
-            tailsDuration: { type: "NUMBER" },
-            distillateAmount: { type: "NUMBER" },
-            distillateABV: { type: "NUMBER" },
-            notes: { type: "STRING" },
-            lowerPlateOn: { type: "BOOLEAN" },
-            upperPlateOn: { type: "BOOLEAN" },
-            dephlegmatorOn: { type: "BOOLEAN" }
-          }
-        }
-      }
-    };
-
-    const apiKey = ""; // Execution environment injects this securely
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-
-    let delay = 1000;
-    let success = false;
-
-    // Retry loop with exponential backoff
-    for (let i = 0; i < 5; i++) {
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        
-        if (!response.ok) throw new Error('API Network error');
-        
-        const result = await response.json();
-        const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
-        
-        if (jsonText) {
-          const parsedData = JSON.parse(jsonText);
-          
-          // Update only the explicitly returned fields, maintaining existing state for others
-          setDistillationForm(prev => {
-            const updated = { ...prev };
-            Object.keys(parsedData).forEach(key => {
-              if (parsedData[key] !== null && parsedData[key] !== undefined && parsedData[key] !== "") {
-                updated[key] = parsedData[key];
-              }
-            });
-            return updated;
-          });
-          showNotification("Distillation log fields updated from your voice command!");
-          success = true;
-          break;
-        }
-      } catch (error) {
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2;
-      }
-    }
-
-    if (!success) {
-      showNotification("Failed to process speech. Please try speaking again or fill out manually.");
-    }
-    setIsLoadingAIDistillation(false);
-  };
-
-  const processBottlingDictation = async (transcript) => {
-    setIsLoadingAIBottling(true);
-    
-    const promptText = `Extract bottling log details from this dictation: "${transcript}". Return a JSON object ONLY with the fields that are explicitly mentioned or clearly implied. Omit any unmentioned fields entirely. Map product names to 'product'. Map times to 'bottlingStartTime' in 'HH:MM' format. Map total bottle counts to 'bottledAmount'. Map lot numbers to 'lotNumber'. Map other text to 'notes'.`;
-
-    const payload = {
-      contents: [{ parts: [{ text: promptText }] }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "OBJECT",
-          properties: {
-            bottlingStartTime: { type: "STRING" },
-            product: { type: "STRING" },
-            bottledAmount: { type: "NUMBER" },
-            lotNumber: { type: "STRING" },
-            notes: { type: "STRING" }
-          }
-        }
-      }
-    };
-
-    const apiKey = ""; // Execution environment injects this securely
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-
-    let delay = 1000;
-    let success = false;
-
-    // Retry loop with exponential backoff
-    for (let i = 0; i < 5; i++) {
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        
-        if (!response.ok) throw new Error('API Network error');
-        
-        const result = await response.json();
-        const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
-        
-        if (jsonText) {
-          const parsedData = JSON.parse(jsonText);
-          
-          setBottlingForm(prev => {
-            const updated = { ...prev };
-            Object.keys(parsedData).forEach(key => {
-              if (parsedData[key] !== null && parsedData[key] !== undefined && parsedData[key] !== "") {
-                updated[key] = parsedData[key];
-              }
-            });
-            return updated;
-          });
-          showNotification("Bottling log fields updated from your voice command!");
-          success = true;
-          break;
-        }
-      } catch (error) {
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2;
-      }
-    }
-
-    if (!success) {
-      showNotification("Failed to process speech. Please try speaking again or fill out manually.");
-    }
-    setIsLoadingAIBottling(false);
-  };
-
-  const startListening = (type) => {
-    if (!('webkitSpeechRecognition' in window)) {
-      showNotification("Speech recognition is not supported in this browser. Please use Chrome.");
-      return;
-    }
-    const recognition = new window.webkitSpeechRecognition();
-    recognition.continuous = false;
-    recognition.lang = 'en-US';
-    
-    recognition.onstart = () => {
-      type === 'distill' ? setIsListeningDistillation(true) : setIsListeningBottling(true);
-      showNotification("Listening... (Speak clearly into your microphone)");
-    };
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      showNotification(`Processing: "${transcript}"...`);
-      
-      // Route the transcript to the correct AI processor
-      if (type === 'distill') {
-        processDistillationDictation(transcript);
-      } else {
-        processBottlingDictation(transcript);
-      }
-    };
-    recognition.onerror = () => {
-      type === 'distill' ? setIsListeningDistillation(false) : setIsListeningBottling(false);
-    };
-    recognition.onend = () => {
-      type === 'distill' ? setIsListeningDistillation(false) : setIsListeningBottling(false);
-    };
-    recognition.start();
-  };
-
   // --- PDF EXPORT ---
   const exportPDF = () => {
     const element = document.getElementById('logs-table');
@@ -641,11 +446,8 @@ export default function App() {
         {/* --- DISTILLATION LOG --- */}
         {view === 'distillation' && (
           <div className={card}>
-            <h2 className="text-2xl font-bold mb-6 text-[#8A2A2B] flex justify-between items-center">
-              <div className="flex items-center gap-2"><FlaskConical size={24}/> {editingLogId ? "Edit Distillation Log" : "New Distillation Log"}</div>
-              <button type="button" onClick={() => startListening('distill')} className={micButton} disabled={isLoadingAIDistillation}>
-                {isLoadingAIDistillation ? <LoaderCircle size={20} className={loadingSpinner}/> : isListeningDistillation ? <MicOff size={20}/> : <Mic size={20}/>}
-              </button>
+            <h2 className="text-2xl font-bold mb-6 text-[#8A2A2B] flex items-center gap-2">
+              <FlaskConical size={24}/> {editingLogId ? "Edit Distillation Log" : "New Distillation Log"}
             </h2>
             <form onSubmit={(e) => handleLogSubmit(e, 'distillation')} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -743,11 +545,8 @@ export default function App() {
         {/* --- BOTTLING LOG --- */}
         {view === 'bottling' && (
           <div className={card}>
-            <h2 className="text-2xl font-bold mb-6 text-[#8A2A2B] flex justify-between items-center">
-              <div className="flex items-center gap-2"><GlassWater size={24}/> {editingLogId ? "Edit Bottling Log" : "New Bottling Log"}</div>
-              <button type="button" onClick={() => startListening('bottle')} className={micButton} disabled={isLoadingAIBottling}>
-                {isLoadingAIBottling ? <LoaderCircle size={20} className={loadingSpinner}/> : isListeningBottling ? <MicOff size={20}/> : <Mic size={20}/>}
-              </button>
+            <h2 className="text-2xl font-bold mb-6 text-[#8A2A2B] flex items-center gap-2">
+              <GlassWater size={24}/> {editingLogId ? "Edit Bottling Log" : "New Bottling Log"}
             </h2>
             <form onSubmit={(e) => handleLogSubmit(e, 'bottling')} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, addDoc, onSnapshot, collection, query, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { getFirestore, doc, addDoc, onSnapshot, collection, query, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Archive, FlaskConical, GlassWater, Home, Plus, Trash2, Mic, MicOff, LoaderCircle, List, ChevronLeft, ChevronRight, FileDown, Pencil, X, LogIn, LogOut } from 'lucide-react';
 
 // Tailwind CSS classes for consistent UI
@@ -13,17 +13,15 @@ const tabButton = "p-4 flex-1 text-center rounded-xl transition-all duration-200
 const activeTab = "bg-[#8A2A2B] text-[#F4EFEA] shadow-lg";
 const inactiveTab = "bg-[#E0D8D0] text-[#4E3629] hover:bg-[#C8C2BA]";
 const notificationBox = "bg-red-700 text-white p-4 rounded-xl mb-4";
-const lowStockItem = "flex justify-between items-center bg-[#C8C2BA] p-3 rounded-xl mb-2";
 const micButton = "bg-[#4E3629] hover:bg-[#8A2A2B] text-[#F4EFEA] font-bold p-3 rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-110 flex items-center justify-center";
 const loadingSpinner = "animate-spin text-[#F4EFEA]";
 const tableHeader = "bg-[#C8C2BA] text-left text-[#4E3629] font-semibold";
 const tableRow = "border-t border-[#B5AE9F] hover:bg-[#C8C2BA] transition-colors";
 const tableCell = "py-3 px-4 text-sm";
-const paginationButton = "px-4 py-2 mx-1 rounded-full bg-[#C8C2BA] hover:bg-[#8A2A2B] hover:text-[#F4EFEA] text-[#4E3629]";
 
-// Firebase configuration - Character-perfect correction from your original screenshot
+// Firebase configuration - Corrected character-perfect against your original screenshot
 const firebaseConfig = {
-  apiKey: "AIzaSyDy1Yr1RPpMwUIAWzlYdwWGgeqEFQpcjZk",
+  apiKey: "AIzaSyDy1Yr1RPpMwUIAWzlydWGGgeqEFQpcjZk",
   authDomain: "distillation-app.firebaseapp.com",
   projectId: "distillation-app",
   storageBucket: "distillation-app.firebasestorage.app",
@@ -49,7 +47,8 @@ export default function App() {
   const [editingInventoryId, setEditingInventoryId] = useState(null);
   const [authError, setAuthError] = useState("");
 
-  // IMPORTANT: CHANGE THIS to your actual Gmail address (e.g., "birgir@gmail.com")
+  // --- SETTINGS ---
+  // Change this to your actual Gmail address (e.g., "birgir@gmail.com")
   const ADMIN_EMAIL = "birgir@thoran.is"; 
 
   const [inventoryForm, setInventoryForm] = useState({
@@ -110,9 +109,9 @@ export default function App() {
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
-      
       const result = await signInWithPopup(auth, provider);
       
+      // Access control
       if (ADMIN_EMAIL !== "your.admin.email@example.com" && result.user.email !== ADMIN_EMAIL) {
         await signOut(auth);
         setAuthError(`Access Denied: ${result.user.email} is not authorized.`);
@@ -199,8 +198,7 @@ export default function App() {
           <button onClick={handleLogin} className={button + " w-full flex items-center justify-center gap-3"}>
             <LogIn size={20} /> Sign in with Google
           </button>
-          {authError && <div className="mt-6 p-3 bg-red-100 text-red-700 rounded-xl text-sm border border-red-200 leading-relaxed font-bold">{authError}</div>}
-          <p className="mt-4 text-xs text-gray-500 italic">Make sure line 64 in App.js is set to your Gmail address.</p>
+          {authError && <div className="mt-6 p-4 bg-red-100 text-red-700 rounded-xl text-sm border border-red-200 leading-relaxed font-bold shadow-inner">{authError}</div>}
         </div>
       </div>
     );
@@ -259,7 +257,7 @@ export default function App() {
           <div className={card}>
             <h2 className="text-2xl font-bold mb-6 text-[#8A2A2B] flex justify-between items-center">
               New Run Log
-              <button onClick={() => showNotification("AI Processing Coming Soon")} className={micButton}><Mic size={20}/></button>
+              <button onClick={() => showNotification("AI Processing Coming Soon")} className="bg-[#4E3629] text-white p-3 rounded-full"><Mic size={20}/></button>
             </h2>
             <form onSubmit={(e) => handleLogSubmit(e, 'distillation')} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -320,7 +318,7 @@ export default function App() {
               <input type="text" placeholder="Item Name" value={inventoryForm.name} onChange={e => setInventoryForm({...inventoryForm, name: e.target.value})} className={inputField} required />
               <div className="grid grid-cols-2 gap-4">
                 <input type="number" placeholder="Quantity" value={inventoryForm.quantity} onChange={e => setInventoryForm({...inventoryForm, quantity: e.target.value})} className={inputField} required />
-                <input type="text" placeholder="Unit (kg, L, Units)" value={inventoryForm.unit} onChange={e => setInventoryForm({...inventoryForm, unit: e.target.value})} className={inputField} required />
+                <input type="text" placeholder="Unit" value={inventoryForm.unit} onChange={e => setInventoryForm({...inventoryForm, unit: e.target.value})} className={inputField} required />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <input type="number" placeholder="Alert Level" value={inventoryForm.lowStockThreshold} onChange={e => setInventoryForm({...inventoryForm, lowStockThreshold: e.target.value})} className={inputField} required />

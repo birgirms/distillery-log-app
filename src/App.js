@@ -81,6 +81,9 @@ export default function App() {
   // UI State
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState("");
+  const [showLowStockModal, setShowLowStockModal] = useState(false);
+  const [hasCheckedStockAlert, setHasCheckedStockAlert] = useState(false);
+  
   const [editingInventoryId, setEditingInventoryId] = useState(null);
   const [editingBarrelId, setEditingBarrelId] = useState(null);
   const [editingLogId, setEditingLogId] = useState(null);
@@ -190,6 +193,17 @@ export default function App() {
     const combined = [...distillationLogs, ...bottlingLogs].sort((a, b) => new Date(b.date) - new Date(a.date));
     setCombinedLogs(combined);
   }, [distillationLogs, bottlingLogs]);
+
+  // --- LOGIN STOCK ALERT MECHANISM ---
+  useEffect(() => {
+    if (user && isAuthReady && inventory.length > 0 && !hasCheckedStockAlert) {
+      const lowStockItems = inventory.filter(item => item.quantity <= item.lowStockThreshold);
+      if (lowStockItems.length > 0) {
+        setShowLowStockModal(true);
+      }
+      setHasCheckedStockAlert(true); // Prevents it from popping up repeatedly during the session
+    }
+  }, [inventory, user, isAuthReady, hasCheckedStockAlert]);
 
   // --- LOGIN LOGIC ---
   const handleLogin = async () => {
@@ -484,18 +498,51 @@ export default function App() {
   };
 
   // --- ANALYTICS DASHBOARD DATA ---
-  const last6Months = [...Array(6)].map((_, i) => {
+  const chartColors = ['#8A2A2B', '#D97757', '#4E3629', '#2C3E50', '#825A45', '#A5694F'];
+
+  // Distillation Chart Data (Stacked)
+  const distProducts = Array.from(new Set(distillationLogs.map(l => l.recipeName).filter(Boolean))).sort();
+  const distColorMap = {};
+  distProducts.forEach((p, i) => distColorMap[p] = chartColors[i % chartColors.length]);
+
+  const distLast6Months = [...Array(6)].map((_, i) => {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
-      return { month: d.toLocaleString('default', { month: 'short' }), year: d.getFullYear(), volume: 0, index: d.getMonth() };
+      return { month: d.toLocaleString('default', { month: 'short' }), year: d.getFullYear(), totals: {}, totalVolume: 0, index: d.getMonth() };
   }).reverse();
 
   distillationLogs.forEach(log => {
       const logDate = new Date(log.date);
-      const monthObj = last6Months.find(m => m.index === logDate.getMonth() && m.year === logDate.getFullYear());
-      if (monthObj) monthObj.volume += (parseFloat(log.distillateAmount) || 0);
+      const monthObj = distLast6Months.find(m => m.index === logDate.getMonth() && m.year === logDate.getFullYear());
+      if (monthObj && log.recipeName) {
+          const amt = parseFloat(log.distillateAmount) || 0;
+          monthObj.totals[log.recipeName] = (monthObj.totals[log.recipeName] || 0) + amt;
+          monthObj.totalVolume += amt;
+      }
   });
-  const maxMonthlyVolume = Math.max(...last6Months.map(m => m.volume), 1);
+  const maxDistVolume = Math.max(...distLast6Months.map(m => m.totalVolume), 1);
+
+  // Bottling Chart Data (Stacked)
+  const botProducts = Array.from(new Set(bottlingLogs.map(l => l.product).filter(Boolean))).sort();
+  const botColorMap = {};
+  botProducts.forEach((p, i) => botColorMap[p] = chartColors[i % chartColors.length]);
+
+  const botLast6Months = [...Array(6)].map((_, i) => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      return { month: d.toLocaleString('default', { month: 'short' }), year: d.getFullYear(), totals: {}, totalVolume: 0, index: d.getMonth() };
+  }).reverse();
+
+  bottlingLogs.forEach(log => {
+      const logDate = new Date(log.date);
+      const monthObj = botLast6Months.find(m => m.index === logDate.getMonth() && m.year === logDate.getFullYear());
+      if (monthObj && log.product) {
+          const amt = parseInt(log.bottledAmount, 10) || 0;
+          monthObj.totals[log.product] = (monthObj.totals[log.product] || 0) + amt;
+          monthObj.totalVolume += amt;
+      }
+  });
+  const maxBotVolume = Math.max(...botLast6Months.map(m => m.totalVolume), 1);
 
   // --- PRE-CALCULATE FILTERS & PAGINATION ---
   const filteredLogs = combinedLogs.filter(log => {
@@ -639,22 +686,60 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Chart */}
-              <div className="bg-white/40 p-6 rounded-2xl border border-[#B5AE9F]">
-                <h3 className="font-bold text-[#4E3629] mb-6 flex items-center"><Droplet size={18} className="mr-2"/> Distillation Volume (Last 6 Months)</h3>
-                <div className="flex items-end h-40 gap-2 border-b-2 border-[#4E3629]/20 pb-2">
-                  {last6Months.map(month => {
-                    const heightPercent = maxMonthlyVolume > 0 ? (month.volume / maxMonthlyVolume) * 100 : 0;
-                    return (
-                      <div key={month.month} className="flex-1 flex flex-col items-center justify-end group relative">
-                        <div className="w-full bg-[#8A2A2B] rounded-t-sm transition-all duration-500 hover:bg-[#6D2121]" style={{ height: `${heightPercent}%`, minHeight: month.volume > 0 ? '4px' : '0' }}></div>
-                        <div className="absolute -top-8 bg-[#4E3629] text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
-                          {month.volume.toFixed(1)} L
+              {/* Charts Container */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Distillation Chart */}
+                <div className="bg-white/40 p-6 rounded-2xl border border-[#B5AE9F] flex flex-col">
+                  <h3 className="font-bold text-[#4E3629] mb-6 flex items-center justify-center"><Droplet size={18} className="mr-2 text-[#8A2A2B]"/> Distillation Volume (L)</h3>
+                  <div className="flex items-end h-48 gap-2 border-b-2 border-[#4E3629]/20 pb-2">
+                    {distLast6Months.map(month => (
+                      <div key={month.month} className="flex-1 flex flex-col items-center justify-end group relative h-full">
+                        <div className="absolute -top-6 bg-[#4E3629] text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
+                          {month.totalVolume.toFixed(0)} L
                         </div>
-                        <span className="text-[10px] font-bold mt-2 uppercase opacity-60 text-center w-full">{month.month}</span>
+                        <div className="flex flex-col-reverse w-full items-center justify-start rounded-t-sm overflow-hidden" style={{ height: `${maxDistVolume > 0 ? (month.totalVolume / maxDistVolume) * 100 : 0}%`, minHeight: month.totalVolume > 0 ? '4px' : '0' }}>
+                          {Object.entries(month.totals).map(([product, amt]) => (
+                            <div key={product} className="w-full transition-all duration-300 hover:brightness-110" style={{ height: `${(amt / month.totalVolume) * 100}%`, backgroundColor: distColorMap[product] }} title={`${product}: ${amt.toFixed(1)} L`}></div>
+                          ))}
+                        </div>
+                        <span className="text-[10px] font-bold mt-2 uppercase opacity-60 text-center w-full block">{month.month}</span>
                       </div>
-                    )
-                  })}
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-3 mt-6 justify-center">
+                    {distProducts.map(p => (
+                      <div key={p} className="flex items-center text-[10px] font-bold uppercase text-[#4E3629]">
+                        <span className="w-3 h-3 rounded-full mr-1 inline-block" style={{ backgroundColor: distColorMap[p] }}></span> {p}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Bottling Chart */}
+                <div className="bg-white/40 p-6 rounded-2xl border border-[#B5AE9F] flex flex-col">
+                  <h3 className="font-bold text-[#4E3629] mb-6 flex items-center justify-center"><GlassWater size={18} className="mr-2 text-[#8A2A2B]"/> Bottling Volume (Units)</h3>
+                  <div className="flex items-end h-48 gap-2 border-b-2 border-[#4E3629]/20 pb-2">
+                    {botLast6Months.map(month => (
+                      <div key={month.month} className="flex-1 flex flex-col items-center justify-end group relative h-full">
+                        <div className="absolute -top-6 bg-[#4E3629] text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
+                          {month.totalVolume.toFixed(0)} Units
+                        </div>
+                        <div className="flex flex-col-reverse w-full items-center justify-start rounded-t-sm overflow-hidden" style={{ height: `${maxBotVolume > 0 ? (month.totalVolume / maxBotVolume) * 100 : 0}%`, minHeight: month.totalVolume > 0 ? '4px' : '0' }}>
+                          {Object.entries(month.totals).map(([product, amt]) => (
+                            <div key={product} className="w-full transition-all duration-300 hover:brightness-110" style={{ height: `${(amt / month.totalVolume) * 100}%`, backgroundColor: botColorMap[product] }} title={`${product}: ${amt} Units`}></div>
+                          ))}
+                        </div>
+                        <span className="text-[10px] font-bold mt-2 uppercase opacity-60 text-center w-full block">{month.month}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-3 mt-6 justify-center">
+                    {botProducts.map(p => (
+                      <div key={p} className="flex items-center text-[10px] font-bold uppercase text-[#4E3629]">
+                        <span className="w-3 h-3 rounded-full mr-1 inline-block" style={{ backgroundColor: botColorMap[p] }}></span> {p}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1193,10 +1278,33 @@ export default function App() {
       </main>
 
       {showNotificationModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[70] animate-in fade-in duration-300">
           <div className="bg-[#F4EFEA] p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center border-t-8 border-[#8A2A2B]">
             <p className="text-lg font-black text-[#4E3629] mb-6">{notificationMessage}</p>
             <button type="button" onClick={() => setShowNotificationModal(false)} className={button + " w-full"}>DISMISS</button>
+          </div>
+        </div>
+      )}
+
+      {/* Low Stock Initial Alert Modal */}
+      {showLowStockModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[60] animate-in fade-in duration-300">
+          <div className="bg-[#E0D8D0] p-8 rounded-3xl shadow-2xl max-w-md w-full border-t-8 border-red-700">
+            <h3 className="text-2xl font-black mb-4 text-red-800 flex items-center gap-2">
+              <Archive size={28}/> Low Stock Alert
+            </h3>
+            <p className="text-[#4E3629] mb-4 font-medium leading-relaxed">
+              The following items are running below your designated safety thresholds:
+            </p>
+            <div className="max-h-48 overflow-y-auto mb-6 pr-2 space-y-2">
+              {inventory.filter(i => i.quantity <= i.lowStockThreshold).map(i => (
+                <div key={i.id} className="flex justify-between items-center bg-white/50 p-3 rounded-xl border border-red-800/20">
+                  <span className="font-bold text-[#4E3629]">{i.name}</span>
+                  <span className="bg-red-700 text-white px-2 py-1 rounded text-xs font-black">{parseFloat(i.quantity).toFixed(2)} / {i.lowStockThreshold} {i.unit}</span>
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={() => setShowLowStockModal(false)} className={button + " w-full"}>Acknowledge</button>
           </div>
         </div>
       )}

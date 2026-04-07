@@ -64,6 +64,17 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
+// --- CURRENCY CONVERSION LOGIC ---
+const getCurrencySymbol = (currency) => {
+  switch(currency) {
+    case 'USD': return '$';
+    case 'EUR': return '€';
+    case 'GBP': return '£';
+    case 'ISK': return 'kr';
+    default: return currency;
+  }
+};
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -83,6 +94,8 @@ export default function App() {
   const [notificationMessage, setNotificationMessage] = useState("");
   const [showLowStockModal, setShowLowStockModal] = useState(false);
   const [hasCheckedStockAlert, setHasCheckedStockAlert] = useState(false);
+  const [displayCurrency, setDisplayCurrency] = useState('ISK'); // Global display currency
+  const [exchangeRates, setExchangeRates] = useState({ ISK: 1, USD: 140, EUR: 150, GBP: 175 }); // Default fallback rates
   
   const [editingInventoryId, setEditingInventoryId] = useState(null);
   const [editingBarrelId, setEditingBarrelId] = useState(null);
@@ -95,7 +108,7 @@ export default function App() {
 
   // --- FORMS STATE ---
   const [inventoryForm, setInventoryForm] = useState({
-    name: '', type: 'ingredient', quantity: '', unit: '', lowStockThreshold: '', leadTimeDays: '', costPerUnit: '', currentLot: ''
+    name: '', type: 'ingredient', quantity: '', unit: '', lowStockThreshold: '', leadTimeDays: '', costPerUnit: '', currency: 'ISK', currentLot: ''
   });
 
   const [barrelForm, setBarrelForm] = useState({
@@ -130,6 +143,13 @@ export default function App() {
   const [expandedLogId, setExpandedLogId] = useState(null);
 
   // --- HELPER FUNCTIONS ---
+  const convertCurrency = (amount, fromCurrency, toCurrency) => {
+    if (!amount) return 0;
+    if (fromCurrency === toCurrency) return parseFloat(amount);
+    const amountInISK = parseFloat(amount) * (exchangeRates[fromCurrency] || 1);
+    return amountInISK / (exchangeRates[toCurrency] || 1);
+  };
+
   const convertQuantity = (qty, fromUnit, toUnit) => {
     if (!fromUnit || !toUnit) return qty;
     const from = fromUnit.toLowerCase().trim();
@@ -152,6 +172,25 @@ export default function App() {
 
   // --- AUTH & DATA LISTENERS ---
   useEffect(() => {
+    // Fetch live currency exchange rates
+    const fetchRates = async () => {
+      try {
+        const res = await fetch('https://open.er-api.com/v6/latest/ISK');
+        const data = await res.json();
+        if (data && data.rates) {
+          setExchangeRates({
+            ISK: 1,
+            USD: 1 / data.rates.USD,
+            EUR: 1 / data.rates.EUR,
+            GBP: 1 / data.rates.GBP
+          });
+        }
+      } catch (err) {
+        console.error("Failed to fetch live rates, using fallback.", err);
+      }
+    };
+    fetchRates();
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsAuthReady(true);
@@ -233,7 +272,8 @@ export default function App() {
       quantity: parseFloat(inventoryForm.quantity) || 0,
       lowStockThreshold: parseFloat(inventoryForm.lowStockThreshold) || 0,
       leadTimeDays: parseInt(inventoryForm.leadTimeDays, 10) || 0,
-      costPerUnit: parseFloat(inventoryForm.costPerUnit) || 0
+      costPerUnit: parseFloat(inventoryForm.costPerUnit) || 0,
+      currency: inventoryForm.currency || 'ISK'
     };
     try {
       if (editingInventoryId) {
@@ -243,7 +283,7 @@ export default function App() {
         await addDoc(collection(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory'), data);
         showNotification("Item Added Successfully");
       }
-      setInventoryForm({ name: '', type: 'ingredient', quantity: '', unit: '', lowStockThreshold: '', leadTimeDays: '', costPerUnit: '', currentLot: '' });
+      setInventoryForm({ name: '', type: 'ingredient', quantity: '', unit: '', lowStockThreshold: '', leadTimeDays: '', costPerUnit: '', currency: 'ISK', currentLot: '' });
       setEditingInventoryId(null);
     } catch (err) { showNotification(`Error saving item: ${err.message}`); }
   };
@@ -366,15 +406,16 @@ export default function App() {
       const distABV = parseFloat(distillationForm.distillateABV) || 0;
       const calculatedLAA = (distAmt * (distABV / 100)).toFixed(2);
       
-      // Calculate COGS
-      let totalCost = 0;
+      // Calculate COGS - Always store in Base Currency (ISK) to keep history accurate
+      let totalCostISK = 0;
       const recipe = recipes.find(r => r.name === distillationForm.recipeName);
       if (recipe) {
         for (const ingredient of recipe.ingredients) {
           const invItem = inventory.find(i => i.name === ingredient.name);
           if (invItem && invItem.costPerUnit) {
             const qty = convertQuantity(parseFloat(ingredient.quantity), ingredient.unit, invItem.unit);
-            totalCost += (qty * parseFloat(invItem.costPerUnit));
+            const costInISK = convertCurrency(parseFloat(invItem.costPerUnit), invItem.currency || 'USD', 'ISK');
+            totalCostISK += (qty * costInISK);
           }
         }
       }
@@ -385,7 +426,7 @@ export default function App() {
         ethanolAmount: parseFloat(distillationForm.ethanolAmount) || 0,
         waterIntoStill: parseFloat(distillationForm.waterIntoStill) || 0,
         laa: calculatedLAA,
-        cogs: totalCost.toFixed(2)
+        cogsISK: totalCostISK.toFixed(2)
       };
     } else {
       formToSave = { 
@@ -398,6 +439,7 @@ export default function App() {
 
     try {
       if (editingLogId) {
+        // Update existing log without re-deducting inventory
         await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, path, editingLogId), formToSave);
         showNotification("Log Updated Successfully");
         setEditingLogId(null);
@@ -451,6 +493,7 @@ export default function App() {
       try {
         const path = log.type === 'distillation' ? 'distillationLogs' : 'bottlingLogs';
         
+        // Restore inventory based on the log type before deleting
         if (log.type === 'distillation') {
           const recipe = recipes.find(r => r.name === log.recipeName);
           if (recipe) {
@@ -592,7 +635,10 @@ export default function App() {
       const yieldStr = isDistill 
         ? `${log.distillateAmount || 0} L @ ${log.distillateABV || 0}%` 
         : `${log.bottledAmount || 0} Units (Lot: ${log.lotNumber || '-'})`;
-      const analytics = isDistill ? `LAA: ${log.laa || 0} L<br/>COGS: $${log.cogs || 0}` : '-';
+      
+      const displayCogs = log.cogsISK !== undefined ? convertCurrency(parseFloat(log.cogsISK), 'ISK', displayCurrency) : convertCurrency(parseFloat(log.cogs || 0), 'USD', displayCurrency);
+      const analytics = isDistill ? `LAA: ${log.laa || 0} L<br/>COGS: ${getCurrencySymbol(displayCurrency)}${displayCogs.toFixed(2)}` : '-';
+      
       const charge = isDistill
         ? `Eth: ${log.ethanolAmount || 0}L<br/>H2O: ${log.waterIntoStill || 0}L<br/>ABV: ${log.abvOfCharge || 0}%`
         : `Source: ${log.source === 'barrel' ? 'Barrel' : 'Tank'}<br/>Boxes: ${log.boxesUsed || 0}`;
@@ -645,7 +691,15 @@ export default function App() {
     <div className={tailwind}>
       <header className="w-full max-w-4xl mb-8 flex flex-col gap-4">
         <div className="flex justify-between items-center bg-[#E0D8D0] p-4 rounded-2xl shadow-md border-b-4 border-[#8A2A2B]">
-          <span className="font-bold text-[#8A2A2B] truncate mr-4">{user.email}</span>
+          <div className="flex items-center gap-4">
+            <select value={displayCurrency} onChange={e => setDisplayCurrency(e.target.value)} className="bg-[#C8C2BA] text-[#4E3629] p-1.5 rounded-lg font-bold text-xs outline-none cursor-pointer">
+              <option value="ISK">ISK (kr)</option>
+              <option value="USD">USD ($)</option>
+              <option value="EUR">EUR (€)</option>
+              <option value="GBP">GBP (£)</option>
+            </select>
+            <span className="font-bold text-[#8A2A2B] truncate hidden md:inline">{user.email}</span>
+          </div>
           <button onClick={handleLogout} className="text-red-800 hover:text-red-600 flex items-center gap-1 text-sm font-black whitespace-nowrap">
             <LogOut size={16} /> LOGOUT
           </button>
@@ -1018,9 +1072,9 @@ export default function App() {
                       <td className="p-3 font-bold">{item.name} <span className="block text-[10px] font-normal opacity-70 uppercase tracking-widest">Lot: {item.currentLot || 'N/A'}</span></td>
                       <td className="p-3 capitalize">{item.type.replace('_', ' ')}</td>
                       <td className={`p-3 ${item.quantity <= item.lowStockThreshold ? 'text-red-700 font-black' : ''}`}>{parseFloat(item.quantity).toFixed(2)} {item.unit}</td>
-                      <td className="p-3 text-green-900 font-medium">${item.costPerUnit || '0.00'}</td>
+                      <td className="p-3 text-green-900 font-medium">{item.costPerUnit ? `${getCurrencySymbol(item.currency || 'USD')}${item.costPerUnit}` : '-'}</td>
                       <td className="p-3 flex justify-center gap-3">
-                        <button type="button" onClick={() => {setEditingInventoryId(item.id); setInventoryForm(item);}} className="p-2 text-blue-700 hover:bg-blue-100 rounded-lg"><Pencil size={18}/></button>
+                        <button type="button" onClick={() => {setEditingInventoryId(item.id); setInventoryForm({...item, currency: item.currency || 'ISK'});}} className="p-2 text-blue-700 hover:bg-blue-100 rounded-lg"><Pencil size={18}/></button>
                         <button type="button" onClick={() => deleteInventoryItem(item.id)} className="p-2 text-red-700 hover:bg-red-100 rounded-lg"><Trash2 size={18}/></button>
                       </td>
                     </tr>
@@ -1053,14 +1107,22 @@ export default function App() {
                 </select>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <input type="number" step="0.01" placeholder="Cost per Unit ($)" value={inventoryForm.costPerUnit} onChange={e => setInventoryForm({...inventoryForm, costPerUnit: e.target.value})} className={inputField} />
-                <input type="text" placeholder="Current Lot #" value={inventoryForm.currentLot} onChange={e => setInventoryForm({...inventoryForm, currentLot: e.target.value})} className={inputField} />
+                <div className="flex space-x-1">
+                  <input type="number" step="0.01" placeholder="Cost per Unit" value={inventoryForm.costPerUnit} onChange={e => setInventoryForm({...inventoryForm, costPerUnit: e.target.value})} className={`${inputField} w-2/3`} />
+                  <select value={inventoryForm.currency} onChange={e => setInventoryForm({...inventoryForm, currency: e.target.value})} className={`${inputField} w-1/3 px-1`}>
+                    <option value="ISK">kr</option>
+                    <option value="USD">$</option>
+                    <option value="EUR">€</option>
+                    <option value="GBP">£</option>
+                  </select>
+                </div>
+                <input type="text" placeholder="Current Lot # (Optional)" value={inventoryForm.currentLot} onChange={e => setInventoryForm({...inventoryForm, currentLot: e.target.value})} className={inputField} />
                 <input type="number" step="0.01" placeholder="Alert Level" value={inventoryForm.lowStockThreshold} onChange={e => setInventoryForm({...inventoryForm, lowStockThreshold: e.target.value})} className={inputField} required />
                 <input type="number" placeholder="Lead Days" value={inventoryForm.leadTimeDays} onChange={e => setInventoryForm({...inventoryForm, leadTimeDays: e.target.value})} className={inputField} required />
               </div>
               <div className="flex gap-2 pt-2">
                 <button type="submit" className={button + " flex-1 uppercase tracking-tighter"}>{editingInventoryId ? "Confirm Changes" : "Register Stock"}</button>
-                {editingInventoryId && <button type="button" onClick={() => {setEditingInventoryId(null); setInventoryForm({name:'', type:'ingredient', quantity:'', unit:'', lowStockThreshold:'', leadTimeDays:'', costPerUnit: '', currentLot: ''});}} className="bg-gray-500 text-white p-3 rounded-xl"><X /></button>}
+                {editingInventoryId && <button type="button" onClick={() => {setEditingInventoryId(null); setInventoryForm({name:'', type:'ingredient', quantity:'', unit:'', lowStockThreshold:'', leadTimeDays:'', costPerUnit: '', currency: 'ISK', currentLot: ''});}} className="bg-gray-500 text-white p-3 rounded-xl"><X /></button>}
               </div>
             </form>
 
@@ -1202,7 +1264,9 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {currentLogs.map(log => (
+                  {currentLogs.map(log => {
+                    const displayCogs = log.cogsISK !== undefined ? convertCurrency(parseFloat(log.cogsISK), 'ISK', displayCurrency) : convertCurrency(parseFloat(log.cogs || 0), 'USD', displayCurrency);
+                    return (
                     <React.Fragment key={log.id}>
                       <tr 
                         className={`${tableRow} cursor-pointer hover:bg-[#C8C2BA]/60 transition-all ${expandedLogId === log.id ? 'bg-[#C8C2BA]/40' : ''}`}
@@ -1225,7 +1289,7 @@ export default function App() {
                             {log.type === 'distillation' ? (
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-y-4 gap-x-8 text-sm text-[#4E3629]">
                                 <div><span className="block text-[10px] uppercase font-bold opacity-60 flex items-center gap-1"><Droplet size={12}/> LAA Generated</span> <span className="text-green-800 font-black">{log.laa || 0} L</span></div>
-                                <div><span className="block text-[10px] uppercase font-bold opacity-60 flex items-center gap-1"><DollarSign size={12}/> Est. Batch Cost</span> <span className="text-green-800 font-black">${log.cogs || '0.00'}</span></div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60 flex items-center gap-1"><DollarSign size={12}/> Est. Batch Cost</span> <span className="text-green-800 font-black">{getCurrencySymbol(displayCurrency)}{displayCogs.toFixed(2)} {displayCurrency}</span></div>
                                 <div className="md:col-span-2"></div>
                                 
                                 <div><span className="block text-[10px] uppercase font-bold opacity-60 mt-4 border-t border-[#B5AE9F]/30 pt-2">Start Time</span> {log.distillationStart || '-'}</div>
@@ -1259,7 +1323,7 @@ export default function App() {
                         </tr>
                       )}
                     </React.Fragment>
-                  ))}
+                  )})}
                   {currentLogs.length === 0 && (
                     <tr>
                       <td colSpan="6" className="p-8 text-center text-[#4E3629]/60 italic font-medium">No logs found for this selection.</td>

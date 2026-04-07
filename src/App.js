@@ -19,9 +19,10 @@ const tableHeader = "bg-[#C8C2BA] text-left text-[#4E3629] font-semibold";
 const tableRow = "border-t border-[#B5AE9F] hover:bg-[#C8C2BA] transition-colors";
 const tableCell = "py-3 px-4 text-sm";
 
-// Firebase configuration - Corrected character-perfect against your original screenshot
+// Firebase configuration
+// 🛑 STOP: Replace the placeholder below with your EXACT copied key from Firebase 🛑
 const firebaseConfig = {
-  apiKey: "AIzaSyDy1Yr1RPpMwUIAWzlydWGGgeqEFQpcjZk",
+  apiKey: "AIzaSyDy1YrlRPpMwUIAWzlYdwWGgeqEFQpcjZk",
   authDomain: "distillation-app.firebaseapp.com",
   projectId: "distillation-app",
   storageBucket: "distillation-app.firebasestorage.app",
@@ -48,7 +49,7 @@ export default function App() {
   const [authError, setAuthError] = useState("");
 
   // --- SETTINGS ---
-  // Change this to your actual Gmail address (e.g., "birgir@gmail.com")
+  // IMPORTANT: CHANGE THIS to your actual Gmail address on line 53
   const ADMIN_EMAIL = "birgir@thoran.is"; 
 
   const [inventoryForm, setInventoryForm] = useState({

@@ -169,9 +169,9 @@ export default function App() {
     if (!user) return;
     const data = {
       ...inventoryForm,
-      quantity: parseFloat(inventoryForm.quantity),
-      lowStockThreshold: parseFloat(inventoryForm.lowStockThreshold),
-      leadTimeDays: parseInt(inventoryForm.leadTimeDays, 10)
+      quantity: parseFloat(inventoryForm.quantity) || 0,
+      lowStockThreshold: parseFloat(inventoryForm.lowStockThreshold) || 0,
+      leadTimeDays: parseInt(inventoryForm.leadTimeDays, 10) || 0
     };
     try {
       if (editingInventoryId) {
@@ -183,7 +183,10 @@ export default function App() {
       }
       setInventoryForm({ name: '', type: 'ingredient', quantity: '', unit: '', lowStockThreshold: '', leadTimeDays: '' });
       setEditingInventoryId(null);
-    } catch (err) { showNotification("Error saving inventory item."); }
+    } catch (err) { 
+      console.error("Inventory Save Error:", err);
+      showNotification(`Error saving item: ${err.message}`); 
+    }
   };
 
   const deleteInventoryItem = async (id) => {
@@ -193,7 +196,8 @@ export default function App() {
         await deleteDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', id));
         showNotification("Item Deleted Permanently");
       } catch(err) {
-        showNotification("Error deleting item.");
+        console.error("Delete Error:", err);
+        showNotification(`Error deleting item: ${err.message}`);
       }
     }
   };
@@ -202,11 +206,18 @@ export default function App() {
   const handleAddRecipe = async (e) => {
     e.preventDefault();
     if (!user) return;
+    const recipeToSave = {
+      ...recipeForm,
+      ingredients: recipeForm.ingredients.map(ing => ({ ...ing, quantity: parseFloat(ing.quantity) || 0 }))
+    };
     try {
-      await addDoc(collection(db, 'artifacts', 'distillation-app', 'users', user.uid, 'recipes'), recipeForm);
+      await addDoc(collection(db, 'artifacts', 'distillation-app', 'users', user.uid, 'recipes'), recipeToSave);
       showNotification("Recipe added successfully!");
       setRecipeForm({ name: '', product: '', ingredients: [{ name: '', quantity: '', unit: '' }] });
-    } catch (err) { showNotification("Error adding recipe."); }
+    } catch (err) { 
+      console.error("Recipe Save Error:", err);
+      showNotification(`Error adding recipe: ${err.message}`); 
+    }
   };
 
   const handleAddBottlingMaterials = async (e) => {
@@ -214,12 +225,15 @@ export default function App() {
     if (!user) return;
     try {
       await setDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'bottlingMaterialDefinitions', bottlingMaterialsForm.name), {
-        materials: bottlingMaterialsForm.materials.map(m => ({ ...m, quantity: parseFloat(m.quantity) })),
+        materials: bottlingMaterialsForm.materials.map(m => ({ ...m, quantity: parseFloat(m.quantity) || 0 })),
         name: bottlingMaterialsForm.name // Store name in doc as well
       });
       showNotification(`Material definition "${bottlingMaterialsForm.name}" saved!`);
       setBottlingMaterialsForm({ name: '', materials: [{ name: '', quantity: '' }] });
-    } catch (err) { showNotification("Error saving materials."); }
+    } catch (err) { 
+      console.error("Material Save Error:", err);
+      showNotification(`Error saving materials: ${err.message}`); 
+    }
   };
 
   // --- LOG SUBMISSIONS & DEDUCTIONS ---
@@ -228,11 +242,16 @@ export default function App() {
     if (!user) return;
     const path = type === 'distillation' ? 'distillationLogs' : 'bottlingLogs';
     
-    // Distillation formatting
-    const formToSave = type === 'distillation' ? { ...distillationForm } : { 
+    // Strict parsing to ensure numbers process correctly for deductions
+    const formToSave = type === 'distillation' ? { 
+      ...distillationForm,
+      distillateAmount: parseFloat(distillationForm.distillateAmount) || 0,
+      ethanolAmount: parseFloat(distillationForm.ethanolAmount) || 0,
+      waterIntoStill: parseFloat(distillationForm.waterIntoStill) || 0
+    } : { 
       ...bottlingForm,
-      bottledAmount: bottlingForm.bottledAmount,
-      boxesUsed: Math.floor((bottlingForm.bottledAmount || 0) / 6)
+      bottledAmount: parseInt(bottlingForm.bottledAmount, 10) || 0,
+      boxesUsed: Math.floor((parseInt(bottlingForm.bottledAmount, 10) || 0) / 6)
     };
 
     try {
@@ -255,7 +274,7 @@ export default function App() {
             for (const ingredient of recipe.ingredients) {
               const invItem = inventory.find(i => i.name === ingredient.name);
               if (invItem) {
-                const newQuantity = (invItem.quantity || 0) - (ingredient.quantity || 0);
+                const newQuantity = (invItem.quantity || 0) - (parseFloat(ingredient.quantity) || 0);
                 await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), {
                   quantity: newQuantity > 0 ? newQuantity : 0,
                 });
@@ -268,7 +287,8 @@ export default function App() {
             for (const mat of matDef.materials) {
               const invItem = inventory.find(item => item.name === mat.name && item.type === 'bottling_material');
               if (invItem) {
-                const newQuantity = (invItem.quantity || 0) - (mat.quantity * bottlingForm.bottledAmount);
+                const deductionAmount = (parseFloat(mat.quantity) || 0) * formToSave.bottledAmount;
+                const newQuantity = (invItem.quantity || 0) - deductionAmount;
                 await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), {
                   quantity: newQuantity > 0 ? newQuantity : 0,
                 });
@@ -284,7 +304,10 @@ export default function App() {
       } else {
         setBottlingForm(emptyBottlingForm);
       }
-    } catch (err) { showNotification("Error saving log."); }
+    } catch (err) { 
+      console.error("Log Save Error:", err);
+      showNotification(`Error saving log: ${err.message}`); 
+    }
   };
 
   const deleteLogItem = async (id, type) => {
@@ -295,7 +318,8 @@ export default function App() {
         await deleteDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, path, id));
         showNotification("Batch Log Deleted.");
       } catch(err) {
-        showNotification("Error deleting log.");
+        console.error("Delete Error:", err);
+        showNotification(`Error deleting log: ${err.message}`);
       }
     }
   };

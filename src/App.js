@@ -7,7 +7,8 @@ import { Archive, FlaskConical, GlassWater, NotebookPen, Home, Plus, Trash2, Loa
 // Tailwind CSS classes for consistent UI
 const tailwind = "bg-[#F4EFEA] text-[#4E3629] min-h-screen p-8 font-sans transition-all duration-300 flex flex-col items-center";
 const card = "bg-[#E0D8D0] rounded-2xl shadow-xl p-6 mb-8 w-full max-w-4xl";
-const inputField = "bg-[#C8C2BA] text-[#4E3629] p-3 rounded-xl w-full focus:outline-none focus:ring-2 focus:ring-[#8A2A2B] placeholder-[#4E3629]";
+// Updated inputField to have a lighter background, a subtle shadow, and CSS to hide number spinners
+const inputField = "bg-[#F4EFEA] text-[#4E3629] p-3 rounded-xl w-full focus:outline-none focus:ring-2 focus:ring-[#8A2A2B] placeholder-[#4E3629]/50 shadow-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 const button = "bg-[#4E3629] hover:bg-[#8A2A2B] text-[#F4EFEA] font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105";
 const tabButton = "p-4 flex-1 text-center rounded-xl transition-all duration-200 flex items-center justify-center font-bold text-sm";
 const activeTab = "bg-[#8A2A2B] text-[#F4EFEA] shadow-lg";
@@ -30,7 +31,7 @@ const TimePicker = ({ value, onChange, required }) => {
       <select
         value={hour}
         onChange={(e) => onChange(`${e.target.value}:${min || '00'}`)}
-        className="bg-[#C8C2BA] text-[#4E3629] p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8A2A2B] font-semibold flex-1 cursor-pointer"
+        className="bg-[#F4EFEA] text-[#4E3629] p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8A2A2B] font-semibold flex-1 cursor-pointer shadow-sm"
         required={required}
       >
         <option value="" disabled hidden>HH</option>
@@ -40,7 +41,7 @@ const TimePicker = ({ value, onChange, required }) => {
       <select
         value={min}
         onChange={(e) => onChange(`${hour || '00'}:${e.target.value}`)}
-        className="bg-[#C8C2BA] text-[#4E3629] p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8A2A2B] font-semibold flex-1 cursor-pointer"
+        className="bg-[#F4EFEA] text-[#4E3629] p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8A2A2B] font-semibold flex-1 cursor-pointer shadow-sm"
         required={required}
       >
         <option value="" disabled hidden>MM</option>
@@ -692,7 +693,7 @@ export default function App() {
       <header className="w-full max-w-4xl mb-8 flex flex-col gap-4">
         <div className="flex justify-between items-center bg-[#E0D8D0] p-4 rounded-2xl shadow-md border-b-4 border-[#8A2A2B]">
           <div className="flex items-center gap-4">
-            <select value={displayCurrency} onChange={e => setDisplayCurrency(e.target.value)} className="bg-[#C8C2BA] text-[#4E3629] p-1.5 rounded-lg font-bold text-xs outline-none cursor-pointer">
+            <select value={displayCurrency} onChange={e => setDisplayCurrency(e.target.value)} className="bg-[#F4EFEA] text-[#4E3629] p-1.5 rounded-lg font-bold text-xs outline-none cursor-pointer shadow-sm">
               <option value="ISK">ISK (kr)</option>
               <option value="USD">USD ($)</option>
               <option value="EUR">EUR (€)</option>

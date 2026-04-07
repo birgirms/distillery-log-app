@@ -2,22 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, addDoc, onSnapshot, collection, query, updateDoc, deleteDoc } from 'firebase/firestore';
-import { Archive, FlaskConical, GlassWater, NotebookPen, Home, Plus, Trash2, LoaderCircle, List, ChevronLeft, ChevronRight, FileDown, Pencil, X, LogIn, LogOut, ChevronDown, ChevronUp } from 'lucide-react';
+import { Archive, FlaskConical, GlassWater, NotebookPen, Home, Plus, Trash2, LoaderCircle, List, ChevronLeft, ChevronRight, FileDown, Pencil, X, LogIn, LogOut, ChevronDown, ChevronUp, Database, TrendingUp, DollarSign, Droplet } from 'lucide-react';
 
 // Tailwind CSS classes for consistent UI
 const tailwind = "bg-[#F4EFEA] text-[#4E3629] min-h-screen p-8 font-sans transition-all duration-300 flex flex-col items-center";
 const card = "bg-[#E0D8D0] rounded-2xl shadow-xl p-6 mb-8 w-full max-w-4xl";
 const inputField = "bg-[#C8C2BA] text-[#4E3629] p-3 rounded-xl w-full focus:outline-none focus:ring-2 focus:ring-[#8A2A2B] placeholder-[#4E3629]";
 const button = "bg-[#4E3629] hover:bg-[#8A2A2B] text-[#F4EFEA] font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105";
-const tabButton = "p-4 flex-1 text-center rounded-xl transition-all duration-200 flex items-center justify-center";
+const tabButton = "p-4 flex-1 text-center rounded-xl transition-all duration-200 flex items-center justify-center font-bold text-sm";
 const activeTab = "bg-[#8A2A2B] text-[#F4EFEA] shadow-lg";
 const inactiveTab = "bg-[#E0D8D0] text-[#4E3629] hover:bg-[#C8C2BA]";
-const notificationBox = "bg-red-700 text-white p-4 rounded-xl mb-4";
-const lowStockItem = "flex justify-between items-center bg-[#C8C2BA] p-3 rounded-xl mb-2";
-const tableHeader = "bg-[#C8C2BA] text-left text-[#4E3629] font-semibold";
-const tableRow = "border-t border-[#B5AE9F] hover:bg-[#C8C2BA] transition-colors";
+const notificationBox = "bg-red-700 text-white p-4 rounded-xl mb-4 shadow-lg";
+const lowStockItem = "flex justify-between items-center bg-[#C8C2BA] p-3 rounded-xl mb-2 font-semibold";
+const tableHeader = "bg-[#C8C2BA] text-left text-[#4E3629] font-bold";
+const tableRow = "border-t border-[#B5AE9F] hover:bg-[#C8C2BA]/60 transition-colors";
 const tableCell = "py-3 px-4 text-sm";
-const paginationButton = "px-4 py-2 mx-1 rounded-full bg-[#C8C2BA] hover:bg-[#8A2A2B] hover:text-[#F4EFEA] text-[#4E3629]";
+const paginationButton = "px-4 py-2 mx-1 rounded-full bg-[#C8C2BA] hover:bg-[#8A2A2B] hover:text-[#F4EFEA] text-[#4E3629] transition-colors";
 
 // Custom TimePicker Component (24-hour dropdown)
 const TimePicker = ({ value, onChange, required }) => {
@@ -68,29 +68,35 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [view, setView] = useState('dashboard');
+  
+  // App Data State
   const [recipes, setRecipes] = useState([]);
   const [inventory, setInventory] = useState([]);
+  const [barrels, setBarrels] = useState([]);
   const [distillationLogs, setDistillationLogs] = useState([]);
   const [bottlingLogs, setBottlingLogs] = useState([]);
   const [combinedLogs, setCombinedLogs] = useState([]);
   const [bottlingMaterialDefinitions, setBottlingMaterialDefinitions] = useState([]);
   
+  // UI State
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState("");
-  
   const [editingInventoryId, setEditingInventoryId] = useState(null);
+  const [editingBarrelId, setEditingBarrelId] = useState(null);
   const [editingLogId, setEditingLogId] = useState(null);
   const [editingRecipeId, setEditingRecipeId] = useState(null);
   const [editingProfileId, setEditingProfileId] = useState(null);
-  
   const [authError, setAuthError] = useState("");
 
-  // HARDCODED ADMIN EMAIL
   const ADMIN_EMAIL = "birgir@thoran.is"; 
 
   // --- FORMS STATE ---
   const [inventoryForm, setInventoryForm] = useState({
-    name: '', type: 'ingredient', quantity: '', unit: '', lowStockThreshold: '', leadTimeDays: ''
+    name: '', type: 'ingredient', quantity: '', unit: '', lowStockThreshold: '', leadTimeDays: '', costPerUnit: '', currentLot: ''
+  });
+
+  const [barrelForm, setBarrelForm] = useState({
+    barrelNumber: '', type: '', capacity: '', fillDate: new Date().toISOString().slice(0, 10), contents: 'Gin', currentVolume: '', usageCount: '1'
   });
 
   const emptyDistillationForm = {
@@ -103,7 +109,7 @@ export default function App() {
 
   const emptyBottlingForm = {
     date: new Date().toISOString().slice(0, 10), bottlingStartTime: '', product: '', bottledAmount: '',
-    boxesUsed: '', lotNumber: '', notes: '', bottlingMaterialDefinition: ''
+    boxesUsed: '', lotNumber: '', notes: '', bottlingMaterialDefinition: '', source: 'tank', barrelId: '', volumeDrawn: ''
   };
   const [bottlingForm, setBottlingForm] = useState(emptyBottlingForm);
 
@@ -117,29 +123,31 @@ export default function App() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  
   const [historyFilter, setHistoryFilter] = useState('All');
   const [expandedLogId, setExpandedLogId] = useState(null);
 
-  // --- UNIT CONVERSION HELPER ---
+  // --- HELPER FUNCTIONS ---
   const convertQuantity = (qty, fromUnit, toUnit) => {
     if (!fromUnit || !toUnit) return qty;
     const from = fromUnit.toLowerCase().trim();
     const to = toUnit.toLowerCase().trim();
     if (from === to) return qty;
-
-    // Weight conversions
     if ((from === 'g' || from === 'gr') && to === 'kg') return qty / 1000;
     if (from === 'kg' && (to === 'g' || to === 'gr')) return qty * 1000;
-
-    // Volume conversions
     if (from === 'ml' && to === 'l') return qty / 1000;
     if (from === 'l' && to === 'ml') return qty * 1000;
-
-    return qty; // Default fallback to 1:1 if conversion not mapped
+    return qty; 
   };
 
-  // --- AUTH LISTENER ---
+  const calculateAge = (dateStr) => {
+    if (!dateStr) return '-';
+    const days = Math.floor((new Date() - new Date(dateStr)) / (1000 * 60 * 60 * 24));
+    if (days < 30) return `${days} days`;
+    if (days < 365) return `${Math.floor(days/30)} months`;
+    return `${(days/365).toFixed(1)} years`;
+  };
+
+  // --- AUTH & DATA LISTENERS ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -148,7 +156,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // --- DATA LISTENERS ---
   useEffect(() => {
     if (user) {
       const pId = 'distillation-app';
@@ -156,6 +163,9 @@ export default function App() {
 
       const unsubInventory = onSnapshot(collection(db, 'artifacts', pId, 'users', uId, 'inventory'), (snapshot) => {
         setInventory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      });
+      const unsubBarrels = onSnapshot(collection(db, 'artifacts', pId, 'users', uId, 'barrels'), (snapshot) => {
+        setBarrels(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       });
       const unsubRecipes = onSnapshot(collection(db, 'artifacts', pId, 'users', uId, 'recipes'), (snapshot) => {
         setRecipes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -171,7 +181,7 @@ export default function App() {
       });
 
       return () => {
-        unsubInventory(); unsubRecipes(); unsubMaterials(); unsubDistLogs(); unsubBotLogs();
+        unsubInventory(); unsubBarrels(); unsubRecipes(); unsubMaterials(); unsubDistLogs(); unsubBotLogs();
       };
     }
   }, [user]);
@@ -188,28 +198,19 @@ export default function App() {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       const result = await signInWithPopup(auth, provider);
-      
-      // Enforce Admin Email
       if (result.user.email !== ADMIN_EMAIL) {
         await signOut(auth);
         setAuthError(`Access Denied: ${result.user.email} is not authorized.`);
       }
     } catch (err) {
-      console.error("Login error:", err);
-      setAuthError(err.message.includes("closed-by-user") 
-        ? "Login window was closed. Please try again." 
-        : `Login failed: ${err.code || err.message}`);
+      setAuthError(err.message.includes("closed-by-user") ? "Login window was closed. Please try again." : `Login failed: ${err.code || err.message}`);
     }
   };
 
   const handleLogout = () => signOut(auth);
+  const showNotification = (msg) => { setNotificationMessage(msg); setShowNotificationModal(true); };
 
-  const showNotification = (msg) => {
-    setNotificationMessage(msg);
-    setShowNotificationModal(true);
-  };
-
-  // --- INVENTORY MANAGEMENT (Add/Edit/Delete) ---
+  // --- INVENTORY MANAGEMENT ---
   const handleInventorySubmit = async (e) => {
     e.preventDefault();
     if (!user) return;
@@ -217,7 +218,8 @@ export default function App() {
       ...inventoryForm,
       quantity: parseFloat(inventoryForm.quantity) || 0,
       lowStockThreshold: parseFloat(inventoryForm.lowStockThreshold) || 0,
-      leadTimeDays: parseInt(inventoryForm.leadTimeDays, 10) || 0
+      leadTimeDays: parseInt(inventoryForm.leadTimeDays, 10) || 0,
+      costPerUnit: parseFloat(inventoryForm.costPerUnit) || 0
     };
     try {
       if (editingInventoryId) {
@@ -227,28 +229,51 @@ export default function App() {
         await addDoc(collection(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory'), data);
         showNotification("Item Added Successfully");
       }
-      setInventoryForm({ name: '', type: 'ingredient', quantity: '', unit: '', lowStockThreshold: '', leadTimeDays: '' });
+      setInventoryForm({ name: '', type: 'ingredient', quantity: '', unit: '', lowStockThreshold: '', leadTimeDays: '', costPerUnit: '', currentLot: '' });
       setEditingInventoryId(null);
-    } catch (err) { 
-      console.error("Inventory Save Error:", err);
-      showNotification(`Error saving item: ${err.message}`); 
-    }
+    } catch (err) { showNotification(`Error saving item: ${err.message}`); }
   };
 
   const deleteInventoryItem = async (id) => {
     if (!user) return;
     if (window.confirm("Are you sure you want to permanently delete this item?")) {
-      try {
-        await deleteDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', id));
-        showNotification("Item Deleted Permanently");
-      } catch(err) {
-        console.error("Delete Error:", err);
-        showNotification(`Error deleting item: ${err.message}`);
-      }
+      await deleteDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', id));
+      showNotification("Item Deleted Permanently");
     }
   };
 
-  // --- RECIPES & MATERIALS DEFINITIONS (Add/Edit/Delete) ---
+  // --- BARREL MANAGEMENT ---
+  const handleBarrelSubmit = async (e) => {
+    e.preventDefault();
+    if (!user) return;
+    const data = {
+      ...barrelForm,
+      capacity: parseFloat(barrelForm.capacity) || 0,
+      currentVolume: parseFloat(barrelForm.currentVolume) || 0,
+      usageCount: parseInt(barrelForm.usageCount, 10) || 1
+    };
+    try {
+      if (editingBarrelId) {
+        await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'barrels', editingBarrelId), data);
+        showNotification("Barrel Updated Successfully");
+      } else {
+        await addDoc(collection(db, 'artifacts', 'distillation-app', 'users', user.uid, 'barrels'), data);
+        showNotification("Barrel Registered Successfully");
+      }
+      setBarrelForm({ barrelNumber: '', type: '', capacity: '', fillDate: new Date().toISOString().slice(0, 10), contents: 'Gin', currentVolume: '', usageCount: '1' });
+      setEditingBarrelId(null);
+    } catch (err) { showNotification(`Error saving barrel: ${err.message}`); }
+  };
+
+  const deleteBarrel = async (id) => {
+    if (!user) return;
+    if (window.confirm("Are you sure you want to delete this barrel profile?")) {
+      await deleteDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'barrels', id));
+      showNotification("Barrel profile deleted.");
+    }
+  };
+
+  // --- RECIPES & MATERIALS DEFINITIONS ---
   const handleAddRecipe = async (e) => {
     e.preventDefault();
     if (!user) return;
@@ -266,10 +291,7 @@ export default function App() {
         showNotification("Recipe added successfully!");
       }
       setRecipeForm({ name: '', product: '', ingredients: [{ name: '', quantity: '', unit: '' }] });
-    } catch (err) { 
-      console.error("Recipe Save Error:", err);
-      showNotification(`Error saving recipe: ${err.message}`); 
-    }
+    } catch (err) { showNotification(`Error saving recipe: ${err.message}`); }
   };
 
   const deleteRecipeItem = async (id) => {
@@ -282,22 +304,16 @@ export default function App() {
 
   const startEditingRecipe = (recipe) => {
     setEditingRecipeId(recipe.id);
-    setRecipeForm({
-      name: recipe.name || '',
-      product: recipe.product || '',
-      ingredients: recipe.ingredients || [{ name: '', quantity: '', unit: '' }]
-    });
+    setRecipeForm({ name: recipe.name || '', product: recipe.product || '', ingredients: recipe.ingredients || [{ name: '', quantity: '', unit: '' }] });
   };
 
   const handleAddBottlingMaterials = async (e) => {
     e.preventDefault();
     if (!user) return;
-    
     const payload = {
       name: bottlingMaterialsForm.name,
       materials: bottlingMaterialsForm.materials.map(m => ({ ...m, quantity: parseFloat(m.quantity) || 0, unit: m.unit || '' }))
     };
-
     try {
       if (editingProfileId) {
         await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'bottlingMaterialDefinitions', editingProfileId), payload);
@@ -305,13 +321,10 @@ export default function App() {
         setEditingProfileId(null);
       } else {
         await setDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'bottlingMaterialDefinitions', payload.name), payload);
-        showNotification(`Material profile "${payload.name}" saved!`);
+        showNotification(`Material profile saved!`);
       }
       setBottlingMaterialsForm({ name: '', materials: [{ name: '', quantity: '', unit: '' }] });
-    } catch (err) { 
-      console.error("Material Save Error:", err);
-      showNotification(`Error saving materials: ${err.message}`); 
-    }
+    } catch (err) { showNotification(`Error saving materials: ${err.message}`); }
   };
 
   const deleteProfileItem = async (id) => {
@@ -324,12 +337,8 @@ export default function App() {
 
   const startEditingProfile = (profile) => {
     setEditingProfileId(profile.id);
-    setBottlingMaterialsForm({
-      name: profile.name || '',
-      materials: profile.materials || [{ name: '', quantity: '', unit: '' }]
-    });
+    setBottlingMaterialsForm({ name: profile.name || '', materials: profile.materials || [{ name: '', quantity: '', unit: '' }] });
   };
-
 
   // --- LOG SUBMISSIONS & DEDUCTIONS ---
   const handleLogSubmit = async (e, type) => {
@@ -337,84 +346,97 @@ export default function App() {
     if (!user) return;
     const path = type === 'distillation' ? 'distillationLogs' : 'bottlingLogs';
     
-    // Strict parsing to ensure numbers process correctly for deductions
-    const formToSave = type === 'distillation' ? { 
-      ...distillationForm,
-      distillateAmount: parseFloat(distillationForm.distillateAmount) || 0,
-      ethanolAmount: parseFloat(distillationForm.ethanolAmount) || 0,
-      waterIntoStill: parseFloat(distillationForm.waterIntoStill) || 0
-    } : { 
-      ...bottlingForm,
-      bottledAmount: parseInt(bottlingForm.bottledAmount, 10) || 0,
-      boxesUsed: Math.floor((parseInt(bottlingForm.bottledAmount, 10) || 0) / 6)
-    };
+    let formToSave = {};
+    if (type === 'distillation') {
+      const distAmt = parseFloat(distillationForm.distillateAmount) || 0;
+      const distABV = parseFloat(distillationForm.distillateABV) || 0;
+      const calculatedLAA = (distAmt * (distABV / 100)).toFixed(2);
+      
+      // Calculate COGS
+      let totalCost = 0;
+      const recipe = recipes.find(r => r.name === distillationForm.recipeName);
+      if (recipe) {
+        for (const ingredient of recipe.ingredients) {
+          const invItem = inventory.find(i => i.name === ingredient.name);
+          if (invItem && invItem.costPerUnit) {
+            const qty = convertQuantity(parseFloat(ingredient.quantity), ingredient.unit, invItem.unit);
+            totalCost += (qty * parseFloat(invItem.costPerUnit));
+          }
+        }
+      }
+
+      formToSave = { 
+        ...distillationForm,
+        distillateAmount: distAmt,
+        ethanolAmount: parseFloat(distillationForm.ethanolAmount) || 0,
+        waterIntoStill: parseFloat(distillationForm.waterIntoStill) || 0,
+        laa: calculatedLAA,
+        cogs: totalCost.toFixed(2)
+      };
+    } else {
+      formToSave = { 
+        ...bottlingForm,
+        bottledAmount: parseInt(bottlingForm.bottledAmount, 10) || 0,
+        boxesUsed: Math.floor((parseInt(bottlingForm.bottledAmount, 10) || 0) / 6),
+        volumeDrawn: parseFloat(bottlingForm.volumeDrawn) || 0
+      };
+    }
 
     try {
       if (editingLogId) {
-        // Update existing log without re-deducting inventory
         await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, path, editingLogId), formToSave);
         showNotification("Log Updated Successfully");
         setEditingLogId(null);
       } else {
-        // Add new log
-        await addDoc(collection(db, 'artifacts', 'distillation-app', 'users', user.uid, path), {
-          ...formToSave, timestamp: new Date()
-        });
+        await addDoc(collection(db, 'artifacts', 'distillation-app', 'users', user.uid, path), { ...formToSave, timestamp: new Date() });
         showNotification("Log Saved Successfully! Inventory Deducted.");
 
-        // Automatic Inventory Deduction (Only on NEW logs)
+        // Deductions
         if (type === 'distillation') {
           const recipe = recipes.find(r => r.name === distillationForm.recipeName);
           if (recipe) {
             for (const ingredient of recipe.ingredients) {
               const invItem = inventory.find(i => i.name === ingredient.name);
               if (invItem) {
-                // Apply unit conversion (e.g. recipe specifies 350g, inventory is stored in kg => deduct 0.35)
                 const deductionQty = convertQuantity(parseFloat(ingredient.quantity) || 0, ingredient.unit, invItem.unit);
                 const newQuantity = (invItem.quantity || 0) - deductionQty;
-                await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), {
-                  quantity: newQuantity > 0 ? newQuantity : 0,
-                });
+                await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), { quantity: newQuantity > 0 ? newQuantity : 0 });
               }
             }
           }
         } else {
+          // Deduct materials
           const matDef = bottlingMaterialDefinitions.find(def => def.name === bottlingForm.product);
           if (matDef) {
             for (const mat of matDef.materials) {
               const invItem = inventory.find(item => item.name === mat.name && item.type === 'bottling_material');
               if (invItem) {
                 const deductionPerBottle = convertQuantity(parseFloat(mat.quantity) || 0, mat.unit, invItem.unit);
-                const deductionAmount = deductionPerBottle * formToSave.bottledAmount;
-                const newQuantity = (invItem.quantity || 0) - deductionAmount;
-                await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), {
-                  quantity: newQuantity > 0 ? newQuantity : 0,
-                });
+                const newQuantity = (invItem.quantity || 0) - (deductionPerBottle * formToSave.bottledAmount);
+                await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), { quantity: newQuantity > 0 ? newQuantity : 0 });
               }
             }
           }
+          // Deduct from Barrel if applicable
+          if (formToSave.source === 'barrel' && formToSave.barrelId) {
+             const barrel = barrels.find(b => b.id === formToSave.barrelId);
+             if (barrel) {
+                const newVolume = (parseFloat(barrel.currentVolume) || 0) - formToSave.volumeDrawn;
+                await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'barrels', barrel.id), { currentVolume: newVolume > 0 ? newVolume : 0 });
+             }
+          }
         }
       }
-
-      // Reset forms
-      if (type === 'distillation') {
-        setDistillationForm(emptyDistillationForm);
-      } else {
-        setBottlingForm(emptyBottlingForm);
-      }
-    } catch (err) { 
-      console.error("Log Save Error:", err);
-      showNotification(`Error saving log: ${err.message}`); 
-    }
+      type === 'distillation' ? setDistillationForm(emptyDistillationForm) : setBottlingForm(emptyBottlingForm);
+    } catch (err) { showNotification(`Error saving log: ${err.message}`); }
   };
 
   const deleteLogItem = async (log) => {
     if (!user) return;
-    if (window.confirm("Are you sure you want to permanently delete this batch log? The materials/ingredients used will be returned to your inventory.")) {
+    if (window.confirm("Permanently delete this batch log? Used materials/ingredients will be returned to inventory.")) {
       try {
         const path = log.type === 'distillation' ? 'distillationLogs' : 'bottlingLogs';
         
-        // Restore inventory based on the log type before deleting
         if (log.type === 'distillation') {
           const recipe = recipes.find(r => r.name === log.recipeName);
           if (recipe) {
@@ -422,10 +444,7 @@ export default function App() {
               const invItem = inventory.find(i => i.name === ingredient.name);
               if (invItem) {
                 const restoredQty = convertQuantity(parseFloat(ingredient.quantity) || 0, ingredient.unit, invItem.unit);
-                const newQuantity = (invItem.quantity || 0) + restoredQty;
-                await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), {
-                  quantity: newQuantity,
-                });
+                await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), { quantity: (invItem.quantity || 0) + restoredQty });
               }
             }
           }
@@ -436,23 +455,20 @@ export default function App() {
               const invItem = inventory.find(item => item.name === mat.name && item.type === 'bottling_material');
               if (invItem) {
                 const deductionPerBottle = convertQuantity(parseFloat(mat.quantity) || 0, mat.unit, invItem.unit);
-                const deductionAmount = deductionPerBottle * (parseInt(log.bottledAmount, 10) || 0);
-                const newQuantity = (invItem.quantity || 0) + deductionAmount;
-                await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), {
-                  quantity: newQuantity,
-                });
+                await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), { quantity: (invItem.quantity || 0) + (deductionPerBottle * (parseInt(log.bottledAmount, 10) || 0)) });
               }
             }
           }
+          if (log.source === 'barrel' && log.barrelId) {
+             const barrel = barrels.find(b => b.id === log.barrelId);
+             if (barrel) {
+                await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'barrels', barrel.id), { currentVolume: (parseFloat(barrel.currentVolume) || 0) + (parseFloat(log.volumeDrawn) || 0) });
+             }
+          }
         }
-
-        // Delete the actual log document
         await deleteDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, path, log.id));
         showNotification("Batch Log Deleted and Inventory Restocked.");
-      } catch(err) {
-        console.error("Delete Error:", err);
-        showNotification(`Error deleting log: ${err.message}`);
-      }
+      } catch(err) { showNotification(`Error deleting log: ${err.message}`); }
     }
   };
 
@@ -460,40 +476,45 @@ export default function App() {
     setExpandedLogId(null);
     setEditingLogId(log.id);
     if (log.type === 'distillation') {
-      setDistillationForm(log);
-      setView('distillation');
+      setDistillationForm(log); setView('distillation');
     } else {
-      setBottlingForm(log);
-      setView('bottling');
+      setBottlingForm(log); setView('bottling');
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Pre-calculate filtered logs so the export logic can access them
+  // --- ANALYTICS DASHBOARD DATA ---
+  const last6Months = [...Array(6)].map((_, i) => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      return { month: d.toLocaleString('default', { month: 'short' }), year: d.getFullYear(), volume: 0, index: d.getMonth() };
+  }).reverse();
+
+  distillationLogs.forEach(log => {
+      const logDate = new Date(log.date);
+      const monthObj = last6Months.find(m => m.index === logDate.getMonth() && m.year === logDate.getFullYear());
+      if (monthObj) monthObj.volume += (parseFloat(log.distillateAmount) || 0);
+  });
+  const maxMonthlyVolume = Math.max(...last6Months.map(m => m.volume), 1);
+
+  // --- PRE-CALCULATE FILTERS & PAGINATION ---
   const filteredLogs = combinedLogs.filter(log => {
     if (historyFilter === 'All') return true;
-    const name = log.recipeName || log.product;
-    return name === historyFilter;
+    return (log.recipeName || log.product) === historyFilter;
   });
-
   const currentLogs = filteredLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);
   const uniqueFilters = Array.from(new Set(combinedLogs.map(l => l.recipeName || l.product).filter(Boolean)));
 
   // --- PDF EXPORT ENGINE ---
   const exportPDF = () => {
-    if (!window.html2pdf) {
-      showNotification("PDF Library not loaded yet.");
-      return;
-    }
+    if (!window.html2pdf) { showNotification("PDF Library not loaded yet."); return; }
 
-    // 1. Create a hidden container for the clean "Excel-like" grid
     const printContainer = document.createElement('div');
     printContainer.style.padding = '20px';
     printContainer.style.fontFamily = 'Helvetica, Arial, sans-serif';
     printContainer.style.color = '#333';
 
-    // 2. Add a clean title
     const title = document.createElement('h2');
     title.innerText = `Distillery Batch Report - ${historyFilter === 'All' ? 'All Logs' : historyFilter}`;
     title.style.borderBottom = '2px solid #8A2A2B';
@@ -501,7 +522,6 @@ export default function App() {
     title.style.marginBottom = '20px';
     printContainer.appendChild(title);
 
-    // 3. Build the comprehensive HTML table string
     let tableHtml = `
       <table style="width: 100%; border-collapse: collapse; font-size: 9px; text-align: left;">
         <thead>
@@ -510,8 +530,8 @@ export default function App() {
             <th style="padding: 6px; border: 1px solid #d1d5db;">Date & Time</th>
             <th style="padding: 6px; border: 1px solid #d1d5db;">Recipe / Product</th>
             <th style="padding: 6px; border: 1px solid #d1d5db;">Yield & Result</th>
-            <th style="padding: 6px; border: 1px solid #d1d5db;">Power & Plates</th>
-            <th style="padding: 6px; border: 1px solid #d1d5db;">Charge Details</th>
+            <th style="padding: 6px; border: 1px solid #d1d5db;">Analytics</th>
+            <th style="padding: 6px; border: 1px solid #d1d5db;">Charge / Source Details</th>
             <th style="padding: 6px; border: 1px solid #d1d5db;">Collection Times</th>
             <th style="padding: 6px; border: 1px solid #d1d5db;">Notes</th>
           </tr>
@@ -519,27 +539,16 @@ export default function App() {
         <tbody>
     `;
 
-    // 4. Populate rows using ALL filtered logs, not just the paginated ones
     filteredLogs.forEach(log => {
       const isDistill = log.type === 'distillation';
-      const date = new Date(log.date).toLocaleDateString();
-      const time = isDistill ? log.distillationStart : log.bottlingStartTime;
-      const dateTime = `${date} ${time || ''}`;
-      
-      const name = log.recipeName || log.product || '-';
-      
+      const dateTime = `${new Date(log.date).toLocaleDateString()} ${isDistill ? log.distillationStart : log.bottlingStartTime || ''}`;
       const yieldStr = isDistill 
         ? `${log.distillateAmount || 0} L @ ${log.distillateABV || 0}%` 
         : `${log.bottledAmount || 0} Units (Lot: ${log.lotNumber || '-'})`;
-        
-      const powerPlates = isDistill
-        ? `Power: ${log.powerLevel || '-'}<br/>Plates: L:${log.lowerPlateOn?'Y':'N'} U:${log.upperPlateOn?'Y':'N'} D:${log.dephlegmatorOn?'Y':'N'}`
-        : '-';
-        
+      const analytics = isDistill ? `LAA: ${log.laa || 0} L<br/>COGS: $${log.cogs || 0}` : '-';
       const charge = isDistill
         ? `Eth: ${log.ethanolAmount || 0}L<br/>H2O: ${log.waterIntoStill || 0}L<br/>ABV: ${log.abvOfCharge || 0}%`
-        : `Boxes: ${log.boxesUsed || 0}`;
-        
+        : `Source: ${log.source === 'barrel' ? 'Barrel' : 'Tank'}<br/>Boxes: ${log.boxesUsed || 0}`;
       const cuts = isDistill
         ? `Heads: ${log.headsCollectionStart||'-'}<br/>Hearts: ${log.heartsCollectionStart||'-'} to ${log.heartsCollectionStop||'-'}<br/>Tails: ${log.tailsDuration||'0'}m`
         : '-';
@@ -548,9 +557,9 @@ export default function App() {
         <tr style="border-bottom: 1px solid #e5e7eb;">
           <td style="padding: 6px; border: 1px solid #d1d5db; font-weight: bold; text-transform: uppercase;">${log.type}</td>
           <td style="padding: 6px; border: 1px solid #d1d5db;">${dateTime}</td>
-          <td style="padding: 6px; border: 1px solid #d1d5db; font-weight: bold;">${name}</td>
+          <td style="padding: 6px; border: 1px solid #d1d5db; font-weight: bold;">${log.recipeName || log.product || '-'}</td>
           <td style="padding: 6px; border: 1px solid #d1d5db;">${yieldStr}</td>
-          <td style="padding: 6px; border: 1px solid #d1d5db;">${powerPlates}</td>
+          <td style="padding: 6px; border: 1px solid #d1d5db;">${analytics}</td>
           <td style="padding: 6px; border: 1px solid #d1d5db;">${charge}</td>
           <td style="padding: 6px; border: 1px solid #d1d5db;">${cuts}</td>
           <td style="padding: 6px; border: 1px solid #d1d5db; max-width: 150px;">${log.notes || '-'}</td>
@@ -561,16 +570,11 @@ export default function App() {
     tableHtml += `</tbody></table>`;
     printContainer.innerHTML += tableHtml;
 
-    // 5. Fire off the PDF generator
-    const opt = {
-      margin:       0.4,
-      filename:     `Distillery_Report_${historyFilter.replace(/[^a-z0-9]/gi, '_')}.pdf`,
-      image:        { type: 'jpeg', quality: 1 },
-      html2canvas:  { scale: 2 },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
-    };
-
-    window.html2pdf().from(printContainer).set(opt).save();
+    window.html2pdf().from(printContainer).set({
+      margin: 0.4, filename: `Distillery_Report_${historyFilter.replace(/[^a-z0-9]/gi, '_')}.pdf`,
+      image: { type: 'jpeg', quality: 1 }, html2canvas: { scale: 2 },
+      jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' }
+    }).save();
   };
 
   // --- RENDER METHODS ---
@@ -603,6 +607,7 @@ export default function App() {
           <button onClick={() => setView('dashboard')} className={`${tabButton} ${view === 'dashboard' ? activeTab : inactiveTab}`}><Home size={18} className="mr-1"/>Home</button>
           <button onClick={() => {setView('distillation'); setEditingLogId(null); setDistillationForm(emptyDistillationForm);}} className={`${tabButton} ${view === 'distillation' ? activeTab : inactiveTab}`}><FlaskConical size={18} className="mr-1"/>Log Run</button>
           <button onClick={() => {setView('bottling'); setEditingLogId(null); setBottlingForm(emptyBottlingForm);}} className={`${tabButton} ${view === 'bottling' ? activeTab : inactiveTab}`}><GlassWater size={18} className="mr-1"/>Bottling</button>
+          <button onClick={() => setView('barrels')} className={`${tabButton} ${view === 'barrels' ? activeTab : inactiveTab}`}><Database size={18} className="mr-1"/>Barrels</button>
           <button onClick={() => setView('inventory')} className={`${tabButton} ${view === 'inventory' ? activeTab : inactiveTab}`}><Archive size={18} className="mr-1"/>Inventory</button>
           <button onClick={() => setView('logHistory')} className={`${tabButton} ${view === 'logHistory' ? activeTab : inactiveTab}`}><List size={18} className="mr-1"/>History</button>
         </nav>
@@ -613,29 +618,54 @@ export default function App() {
         {view === 'dashboard' && (
           <div className="space-y-6">
             <div className={card}>
-              <h1 className="text-3xl font-black mb-4 text-[#8A2A2B]">Distillery Dashboard</h1>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <h1 className="text-3xl font-black mb-6 text-[#8A2A2B] flex items-center gap-2"><TrendingUp size={28}/> Production Analytics</h1>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 <div className="bg-[#8A2A2B] p-4 rounded-xl text-white shadow-lg text-center">
                   <p className="text-3xl font-bold">{distillationLogs.length}</p>
-                  <p className="text-xs uppercase font-bold opacity-90 tracking-widest mt-1">Distillations</p>
+                  <p className="text-[10px] uppercase font-bold opacity-90 tracking-widest mt-1">Distillations</p>
                 </div>
                 <div className="bg-[#8A2A2B] p-4 rounded-xl text-white shadow-lg text-center">
                   <p className="text-3xl font-bold">{bottlingLogs.length}</p>
-                  <p className="text-xs uppercase font-bold opacity-90 tracking-widest mt-1">Bottlings</p>
+                  <p className="text-[10px] uppercase font-bold opacity-90 tracking-widest mt-1">Bottlings</p>
                 </div>
                 <div className="bg-[#8A2A2B] p-4 rounded-xl text-white shadow-lg text-center">
                   <p className="text-3xl font-bold">{inventory.length}</p>
-                  <p className="text-xs uppercase font-bold opacity-90 tracking-widest mt-1">Stock Items</p>
+                  <p className="text-[10px] uppercase font-bold opacity-90 tracking-widest mt-1">Stock Items</p>
+                </div>
+                <div className="bg-[#8A2A2B] p-4 rounded-xl text-white shadow-lg text-center">
+                  <p className="text-3xl font-bold">{barrels.length}</p>
+                  <p className="text-[10px] uppercase font-bold opacity-90 tracking-widest mt-1">Active Barrels</p>
+                </div>
+              </div>
+
+              {/* Chart */}
+              <div className="bg-white/40 p-6 rounded-2xl border border-[#B5AE9F]">
+                <h3 className="font-bold text-[#4E3629] mb-6 flex items-center"><Droplet size={18} className="mr-2"/> Distillation Volume (Last 6 Months)</h3>
+                <div className="flex items-end h-40 gap-2 border-b-2 border-[#4E3629]/20 pb-2">
+                  {last6Months.map(month => {
+                    const heightPercent = maxMonthlyVolume > 0 ? (month.volume / maxMonthlyVolume) * 100 : 0;
+                    return (
+                      <div key={month.month} className="flex-1 flex flex-col items-center justify-end group relative">
+                        <div className="w-full bg-[#8A2A2B] rounded-t-sm transition-all duration-500 hover:bg-[#6D2121]" style={{ height: `${heightPercent}%`, minHeight: month.volume > 0 ? '4px' : '0' }}></div>
+                        <div className="absolute -top-8 bg-[#4E3629] text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
+                          {month.volume.toFixed(1)} L
+                        </div>
+                        <span className="text-[10px] font-bold mt-2 uppercase opacity-60 text-center w-full">{month.month}</span>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             </div>
+
             {inventory.some(i => i.quantity <= i.lowStockThreshold) && (
               <div className={notificationBox}>
-                <h3 className="font-bold mb-2 flex items-center gap-2"><Archive size={18}/> Urgent: Low Stock</h3>
+                <h3 className="font-bold mb-2 flex items-center gap-2"><Archive size={18}/> Urgent: Low Stock Alert</h3>
                 {inventory.filter(i => i.quantity <= i.lowStockThreshold).map(i => (
                   <div key={i.id} className={lowStockItem}>
-                    <span className="font-bold">{i.name}</span>
-                    <span className="bg-white/20 px-2 py-1 rounded text-sm">{i.quantity} / {i.lowStockThreshold} {i.unit}</span>
+                    <span className="font-bold text-[#4E3629]">{i.name}</span>
+                    <span className="bg-[#8A2A2B] text-white px-2 py-1 rounded text-sm">{i.quantity} / {i.lowStockThreshold} {i.unit}</span>
                   </div>
                 ))}
               </div>
@@ -728,6 +758,12 @@ export default function App() {
                 </div>
               </div>
 
+              {distillationForm.distillateAmount && distillationForm.distillateABV && (
+                <div className="bg-green-800/10 border border-green-800 text-green-900 p-3 rounded-xl flex items-center font-bold">
+                  <TrendingUp size={18} className="mr-2"/> Calculated LAA: {(parseFloat(distillationForm.distillateAmount) * (parseFloat(distillationForm.distillateABV) / 100)).toFixed(2)} L
+                </div>
+              )}
+
               <textarea placeholder="Additional Notes..." value={distillationForm.notes} onChange={e => setDistillationForm({...distillationForm, notes: e.target.value})} className={inputField + " h-24"} />
               
               <div className="flex gap-2">
@@ -768,9 +804,34 @@ export default function App() {
                 </select>
               </div>
 
+              <div className="bg-[#C8C2BA]/30 p-4 rounded-xl space-y-4 border border-[#B5AE9F]">
+                <div>
+                  <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Liquid Source</label>
+                  <select value={bottlingForm.source} onChange={e => setBottlingForm({...bottlingForm, source: e.target.value, barrelId: ''})} className={inputField} required>
+                    <option value="tank">Standard Tank / IBC</option>
+                    <option value="barrel">Aging Barrel</option>
+                  </select>
+                </div>
+                {bottlingForm.source === 'barrel' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
+                    <div>
+                      <label className="block text-xs font-bold uppercase mb-1 text-red-800 ml-1">Select Barrel to Drain</label>
+                      <select value={bottlingForm.barrelId} onChange={e => setBottlingForm({...bottlingForm, barrelId: e.target.value})} className={`${inputField} border-red-800/30 border-2`} required>
+                        <option value="">Select Active Barrel...</option>
+                        {barrels.map(b => <option key={b.id} value={b.id}>{b.barrelNumber} ({b.contents} - {b.currentVolume}L left)</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase mb-1 text-red-800 ml-1">Volume Drawn (L)</label>
+                      <input type="number" step="0.01" value={bottlingForm.volumeDrawn} onChange={e => setBottlingForm({...bottlingForm, volumeDrawn: e.target.value})} className={`${inputField} border-red-800/30 border-2`} required />
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Total Bottles</label>
+                  <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Total Bottles Yielded</label>
                   <input type="number" value={bottlingForm.bottledAmount} onChange={e => setBottlingForm({...bottlingForm, bottledAmount: e.target.value})} className={inputField} required />
                 </div>
                 <div>
@@ -793,6 +854,69 @@ export default function App() {
           </div>
         )}
 
+        {/* --- BARREL MANAGEMENT --- */}
+        {view === 'barrels' && (
+          <div className={card}>
+            <h2 className="text-3xl font-black mb-6 text-[#8A2A2B] flex items-center gap-2"><Database size={28}/> Barrel Maturation Tracking</h2>
+            
+            <div className="overflow-x-auto mb-8 bg-white/40 rounded-2xl p-2 border border-[#B5AE9F]">
+              <h3 className="font-bold text-lg p-2 ml-2 text-[#4E3629]">Active Barrels</h3>
+              <table className="w-full">
+                <thead><tr className={tableHeader}><th className="p-3">ID / Name</th><th className="p-3">Type</th><th className="p-3">Contents</th><th className="p-3">Fill Date / Age</th><th className="p-3">Vol (L)</th><th className="p-3 text-center">Manage</th></tr></thead>
+                <tbody>
+                  {barrels.map(barrel => (
+                    <tr key={barrel.id} className={tableRow}>
+                      <td className="p-3 font-bold">{barrel.barrelNumber} <span className="block text-[10px] uppercase font-normal opacity-70">Used {barrel.usageCount}x</span></td>
+                      <td className="p-3">{barrel.type} <span className="block text-[10px] uppercase opacity-70">{barrel.capacity}L Cap</span></td>
+                      <td className="p-3 font-semibold">{barrel.contents}</td>
+                      <td className="p-3">{new Date(barrel.fillDate).toLocaleDateString()} <span className="block text-[10px] uppercase font-bold text-[#8A2A2B]">{calculateAge(barrel.fillDate)}</span></td>
+                      <td className="p-3 font-bold">{barrel.currentVolume} L</td>
+                      <td className="p-3 flex justify-center gap-3">
+                        <button type="button" onClick={() => {setEditingBarrelId(barrel.id); setBarrelForm(barrel);}} className="p-2 text-blue-700 hover:bg-blue-100 rounded-lg"><Pencil size={18}/></button>
+                        <button type="button" onClick={() => deleteBarrel(barrel.id)} className="p-2 text-red-700 hover:bg-red-100 rounded-lg"><Trash2 size={18}/></button>
+                      </td>
+                    </tr>
+                  ))}
+                  {barrels.length === 0 && <tr><td colSpan="6" className="p-8 text-center text-[#4E3629]/60 italic font-medium">No active barrels currently registered.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+
+            <form onSubmit={handleBarrelSubmit} className="bg-[#C8C2BA] p-6 rounded-2xl border-2 border-[#8A2A2B]/20 space-y-4 shadow-inner mb-12">
+              <h3 className="font-black text-[#8A2A2B] uppercase text-sm tracking-widest flex items-center gap-2">
+                {editingBarrelId ? <><Pencil size={18}/> Modify Barrel Details</> : <><Plus size={18}/> Register New Barrel</>}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input type="text" placeholder="Barrel ID / Number" value={barrelForm.barrelNumber} onChange={e => setBarrelForm({...barrelForm, barrelNumber: e.target.value})} className={inputField} required />
+                <input type="text" placeholder="Wood/Type (e.g. Ex-Bourbon, New Oak)" value={barrelForm.type} onChange={e => setBarrelForm({...barrelForm, type: e.target.value})} className={inputField} required />
+                <input type="number" placeholder="Total Capacity (L)" value={barrelForm.capacity} onChange={e => setBarrelForm({...barrelForm, capacity: e.target.value})} className={inputField} required />
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                   <label className="block text-[10px] font-bold uppercase mb-1 opacity-70 ml-1">Fill Date</label>
+                   <input type="date" value={barrelForm.fillDate} onChange={e => setBarrelForm({...barrelForm, fillDate: e.target.value})} className={inputField} required />
+                </div>
+                <div>
+                   <label className="block text-[10px] font-bold uppercase mb-1 opacity-70 ml-1">Contents</label>
+                   <input type="text" placeholder="e.g. Dry Gin" value={barrelForm.contents} onChange={e => setBarrelForm({...barrelForm, contents: e.target.value})} className={inputField} required />
+                </div>
+                <div>
+                   <label className="block text-[10px] font-bold uppercase mb-1 opacity-70 ml-1">Current Vol (L)</label>
+                   <input type="number" step="0.01" value={barrelForm.currentVolume} onChange={e => setBarrelForm({...barrelForm, currentVolume: e.target.value})} className={inputField} required />
+                </div>
+                <div>
+                   <label className="block text-[10px] font-bold uppercase mb-1 opacity-70 ml-1">Times Used</label>
+                   <input type="number" value={barrelForm.usageCount} onChange={e => setBarrelForm({...barrelForm, usageCount: e.target.value})} className={inputField} required />
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button type="submit" className={button + " flex-1 uppercase tracking-tighter"}>{editingBarrelId ? "Update Barrel" : "Register Barrel"}</button>
+                {editingBarrelId && <button type="button" onClick={() => {setEditingBarrelId(null); setBarrelForm({ barrelNumber: '', type: '', capacity: '', fillDate: new Date().toISOString().slice(0, 10), contents: 'Gin', currentVolume: '', usageCount: '1' });}} className="bg-gray-500 text-white p-3 rounded-xl"><X /></button>}
+              </div>
+            </form>
+          </div>
+        )}
+
         {/* --- INVENTORY MANAGER (Includes Recipes & Definitions) --- */}
         {view === 'inventory' && (
           <div className={card}>
@@ -802,13 +926,14 @@ export default function App() {
             <div className="overflow-x-auto mb-8 bg-white/40 rounded-2xl p-2 border border-[#B5AE9F]">
               <h3 className="font-bold text-lg p-2 ml-2 text-[#4E3629]">Current Stock</h3>
               <table className="w-full">
-                <thead><tr className={tableHeader}><th className="p-3">Item</th><th className="p-3">Type</th><th className="p-3">Stock Level</th><th className="p-3 text-center">Manage</th></tr></thead>
+                <thead><tr className={tableHeader}><th className="p-3">Item / Lot</th><th className="p-3">Type</th><th className="p-3">Stock Level</th><th className="p-3">Cost/Unit</th><th className="p-3 text-center">Manage</th></tr></thead>
                 <tbody>
                   {inventory.map(item => (
                     <tr key={item.id} className={tableRow}>
-                      <td className="p-3 font-bold">{item.name}</td>
+                      <td className="p-3 font-bold">{item.name} <span className="block text-[10px] font-normal opacity-70 uppercase tracking-widest">Lot: {item.currentLot || 'N/A'}</span></td>
                       <td className="p-3 capitalize">{item.type.replace('_', ' ')}</td>
                       <td className={`p-3 ${item.quantity <= item.lowStockThreshold ? 'text-red-700 font-black' : ''}`}>{parseFloat(item.quantity).toFixed(2)} {item.unit}</td>
+                      <td className="p-3 text-green-900 font-medium">${item.costPerUnit || '0.00'}</td>
                       <td className="p-3 flex justify-center gap-3">
                         <button type="button" onClick={() => {setEditingInventoryId(item.id); setInventoryForm(item);}} className="p-2 text-blue-700 hover:bg-blue-100 rounded-lg"><Pencil size={18}/></button>
                         <button type="button" onClick={() => deleteInventoryItem(item.id)} className="p-2 text-red-700 hover:bg-red-100 rounded-lg"><Trash2 size={18}/></button>
@@ -831,7 +956,7 @@ export default function App() {
                   <option value="bottling_material">Bottling Material</option>
                 </select>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <input type="number" step="0.01" placeholder="Quantity" value={inventoryForm.quantity} onChange={e => setInventoryForm({...inventoryForm, quantity: e.target.value})} className={inputField} required />
                 <select value={inventoryForm.unit} onChange={e => setInventoryForm({...inventoryForm, unit: e.target.value})} className={inputField} required>
                   <option value="">Unit</option>
@@ -841,12 +966,16 @@ export default function App() {
                   <option value="ml">ml</option>
                   <option value="units">units</option>
                 </select>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <input type="number" step="0.01" placeholder="Cost per Unit ($)" value={inventoryForm.costPerUnit} onChange={e => setInventoryForm({...inventoryForm, costPerUnit: e.target.value})} className={inputField} />
+                <input type="text" placeholder="Current Lot #" value={inventoryForm.currentLot} onChange={e => setInventoryForm({...inventoryForm, currentLot: e.target.value})} className={inputField} />
                 <input type="number" step="0.01" placeholder="Alert Level" value={inventoryForm.lowStockThreshold} onChange={e => setInventoryForm({...inventoryForm, lowStockThreshold: e.target.value})} className={inputField} required />
                 <input type="number" placeholder="Lead Days" value={inventoryForm.leadTimeDays} onChange={e => setInventoryForm({...inventoryForm, leadTimeDays: e.target.value})} className={inputField} required />
               </div>
               <div className="flex gap-2 pt-2">
                 <button type="submit" className={button + " flex-1 uppercase tracking-tighter"}>{editingInventoryId ? "Confirm Changes" : "Register Stock"}</button>
-                {editingInventoryId && <button type="button" onClick={() => {setEditingInventoryId(null); setInventoryForm({name:'', type:'ingredient', quantity:'', unit:'', lowStockThreshold:'', leadTimeDays:''});}} className="bg-gray-500 text-white p-3 rounded-xl"><X /></button>}
+                {editingInventoryId && <button type="button" onClick={() => {setEditingInventoryId(null); setInventoryForm({name:'', type:'ingredient', quantity:'', unit:'', lowStockThreshold:'', leadTimeDays:'', costPerUnit: '', currentLot: ''});}} className="bg-gray-500 text-white p-3 rounded-xl"><X /></button>}
               </div>
             </form>
 
@@ -1010,24 +1139,35 @@ export default function App() {
                           <td colSpan="6" className="p-6">
                             {log.type === 'distillation' ? (
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-y-4 gap-x-8 text-sm text-[#4E3629]">
-                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Start Time</span> {log.distillationStart || '-'}</div>
-                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Power Level</span> {log.powerLevel || '-'}</div>
-                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Ethanol Into Still</span> {log.ethanolAmount || '0'} L</div>
-                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Water Into Still</span> {log.waterIntoStill || '0'} L</div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60 flex items-center gap-1"><Droplet size={12}/> LAA Generated</span> <span className="text-green-800 font-black">{log.laa || 0} L</span></div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60 flex items-center gap-1"><DollarSign size={12}/> Est. Batch Cost</span> <span className="text-green-800 font-black">${log.cogs || '0.00'}</span></div>
+                                <div className="md:col-span-2"></div>
+                                
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60 mt-4 border-t border-[#B5AE9F]/30 pt-2">Start Time</span> {log.distillationStart || '-'}</div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60 mt-4 border-t border-[#B5AE9F]/30 pt-2">Power Level</span> {log.powerLevel || '-'}</div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60 mt-4 border-t border-[#B5AE9F]/30 pt-2">Ethanol Into Still</span> {log.ethanolAmount || '0'} L</div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60 mt-4 border-t border-[#B5AE9F]/30 pt-2">Water Into Still</span> {log.waterIntoStill || '0'} L</div>
+                                
                                 <div><span className="block text-[10px] uppercase font-bold opacity-60">Heads Start</span> {log.headsCollectionStart || '-'}</div>
                                 <div><span className="block text-[10px] uppercase font-bold opacity-60">Hearts Start</span> {log.heartsCollectionStart || '-'}</div>
                                 <div><span className="block text-[10px] uppercase font-bold opacity-60">Hearts Stop</span> {log.heartsCollectionStop || '-'}</div>
                                 <div><span className="block text-[10px] uppercase font-bold opacity-60">Tails Duration</span> {log.tailsDuration || '0'} min</div>
+                                
                                 <div><span className="block text-[10px] uppercase font-bold opacity-60">Lower Plate</span> {log.lowerPlateOn ? 'ON' : 'OFF'}</div>
                                 <div><span className="block text-[10px] uppercase font-bold opacity-60">Upper Plate</span> {log.upperPlateOn ? 'ON' : 'OFF'}</div>
                                 <div><span className="block text-[10px] uppercase font-bold opacity-60">Dephlegmator</span> {log.dephlegmatorOn ? 'ON' : 'OFF'}</div>
+                                
                                 <div className="col-span-2 md:col-span-4 mt-2 pt-2 border-t border-[#B5AE9F]/30"><span className="block text-[10px] uppercase font-bold opacity-60">Notes</span> <span className="italic">{log.notes || 'No notes provided.'}</span></div>
                               </div>
                             ) : (
-                              <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm text-[#4E3629]">
-                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Bottling Time</span> {log.bottlingStartTime || '-'}</div>
-                                <div><span className="block text-[10px] uppercase font-bold opacity-60">Boxes Used</span> {log.boxesUsed || '0'}</div>
-                                <div className="col-span-2 mt-2 pt-2 border-t border-[#B5AE9F]/30"><span className="block text-[10px] uppercase font-bold opacity-60">Notes</span> <span className="italic">{log.notes || 'No notes provided.'}</span></div>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-y-4 gap-x-8 text-sm text-[#4E3629]">
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60 text-[#8A2A2B]">Liquid Source</span> <span className="font-black capitalize">{log.source === 'barrel' ? `Barrel` : 'Tank/IBC'}</span></div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60 text-[#8A2A2B]">Volume Drawn</span> <span className="font-black">{log.volumeDrawn || 0} L</span></div>
+                                <div className="md:col-span-2"></div>
+                                
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60 mt-4 border-t border-[#B5AE9F]/30 pt-2">Bottling Time</span> {log.bottlingStartTime || '-'}</div>
+                                <div><span className="block text-[10px] uppercase font-bold opacity-60 mt-4 border-t border-[#B5AE9F]/30 pt-2">Boxes Used</span> {log.boxesUsed || '0'}</div>
+                                <div className="col-span-2 md:col-span-4 mt-2 pt-2 border-t border-[#B5AE9F]/30"><span className="block text-[10px] uppercase font-bold opacity-60">Notes</span> <span className="italic">{log.notes || 'No notes provided.'}</span></div>
                               </div>
                             )}
                           </td>

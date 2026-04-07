@@ -19,6 +19,37 @@ const tableRow = "border-t border-[#B5AE9F] hover:bg-[#C8C2BA] transition-colors
 const tableCell = "py-3 px-4 text-sm";
 const paginationButton = "px-4 py-2 mx-1 rounded-full bg-[#C8C2BA] hover:bg-[#8A2A2B] hover:text-[#F4EFEA] text-[#4E3629]";
 
+// Custom TimePicker Component (24-hour dropdown)
+const TimePicker = ({ value, onChange, required }) => {
+  const [hour, min] = value ? value.split(":") : ["", ""];
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+  const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
+
+  return (
+    <div className="flex items-center space-x-2">
+      <select
+        value={hour}
+        onChange={(e) => onChange(`${e.target.value}:${min || '00'}`)}
+        className="bg-[#C8C2BA] text-[#4E3629] p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8A2A2B] font-semibold flex-1 cursor-pointer"
+        required={required}
+      >
+        <option value="" disabled hidden>HH</option>
+        {hours.map((h) => (<option key={h} value={h}>{h}</option>))}
+      </select>
+      <span className="text-[#4E3629] font-bold text-xl pb-1">:</span>
+      <select
+        value={min}
+        onChange={(e) => onChange(`${hour || '00'}:${e.target.value}`)}
+        className="bg-[#C8C2BA] text-[#4E3629] p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8A2A2B] font-semibold flex-1 cursor-pointer"
+        required={required}
+      >
+        <option value="" disabled hidden>MM</option>
+        {minutes.map((m) => (<option key={m} value={m}>{m}</option>))}
+      </select>
+    </div>
+  );
+};
+
 // Firebase configuration with your exact API Key
 const firebaseConfig = {
   apiKey: "AIzaSyDy1YrlRPpMwUIAWzlYdwWGgeqEFQpcjZk",
@@ -49,6 +80,8 @@ export default function App() {
   
   const [editingInventoryId, setEditingInventoryId] = useState(null);
   const [editingLogId, setEditingLogId] = useState(null);
+  const [editingRecipeId, setEditingRecipeId] = useState(null);
+  const [editingProfileId, setEditingProfileId] = useState(null);
   
   const [authError, setAuthError] = useState("");
 
@@ -61,7 +94,7 @@ export default function App() {
   });
 
   const emptyDistillationForm = {
-    date: new Date().toISOString().slice(0, 16), recipeName: '', finalProduct: '', ethanolAmount: '',
+    date: new Date().toISOString().slice(0, 10), recipeName: '', finalProduct: '', ethanolAmount: '',
     waterIntoStill: '', abvOfCharge: '', headsCollectionStart: '', heartsCollectionStart: '', heartsCollectionStop: '',
     tailsDuration: '', distillateAmount: '', distillateABV: '', powerLevel: '', distillationStart: '', notes: '',
     lowerPlateOn: false, upperPlateOn: false, dephlegmatorOn: false,
@@ -79,11 +112,29 @@ export default function App() {
   });
 
   const [bottlingMaterialsForm, setBottlingMaterialsForm] = useState({
-    name: '', materials: [{ name: '', quantity: '' }],
+    name: '', materials: [{ name: '', quantity: '', unit: '' }],
   });
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+
+  // --- UNIT CONVERSION HELPER ---
+  const convertQuantity = (qty, fromUnit, toUnit) => {
+    if (!fromUnit || !toUnit) return qty;
+    const from = fromUnit.toLowerCase().trim();
+    const to = toUnit.toLowerCase().trim();
+    if (from === to) return qty;
+
+    // Weight conversions
+    if ((from === 'g' || from === 'gr') && to === 'kg') return qty / 1000;
+    if (from === 'kg' && (to === 'g' || to === 'gr')) return qty * 1000;
+
+    // Volume conversions
+    if (from === 'ml' && to === 'l') return qty / 1000;
+    if (from === 'l' && to === 'ml') return qty * 1000;
+
+    return qty; // Default fallback to 1:1 if conversion not mapped
+  };
 
   // --- AUTH LISTENER ---
   useEffect(() => {
@@ -194,39 +245,88 @@ export default function App() {
     }
   };
 
-  // --- RECIPES & MATERIALS DEFINITIONS ---
+  // --- RECIPES & MATERIALS DEFINITIONS (Add/Edit/Delete) ---
   const handleAddRecipe = async (e) => {
     e.preventDefault();
     if (!user) return;
     const recipeToSave = {
       ...recipeForm,
-      ingredients: recipeForm.ingredients.map(ing => ({ ...ing, quantity: parseFloat(ing.quantity) || 0 }))
+      ingredients: recipeForm.ingredients.map(ing => ({ ...ing, quantity: parseFloat(ing.quantity) || 0, unit: ing.unit || '' }))
     };
     try {
-      await addDoc(collection(db, 'artifacts', 'distillation-app', 'users', user.uid, 'recipes'), recipeToSave);
-      showNotification("Recipe added successfully!");
+      if (editingRecipeId) {
+        await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'recipes', editingRecipeId), recipeToSave);
+        showNotification("Recipe updated successfully!");
+        setEditingRecipeId(null);
+      } else {
+        await addDoc(collection(db, 'artifacts', 'distillation-app', 'users', user.uid, 'recipes'), recipeToSave);
+        showNotification("Recipe added successfully!");
+      }
       setRecipeForm({ name: '', product: '', ingredients: [{ name: '', quantity: '', unit: '' }] });
     } catch (err) { 
       console.error("Recipe Save Error:", err);
-      showNotification(`Error adding recipe: ${err.message}`); 
+      showNotification(`Error saving recipe: ${err.message}`); 
     }
+  };
+
+  const deleteRecipeItem = async (id) => {
+    if (!user) return;
+    if (window.confirm("Are you sure you want to delete this recipe?")) {
+      await deleteDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'recipes', id));
+      showNotification("Recipe deleted.");
+    }
+  };
+
+  const startEditingRecipe = (recipe) => {
+    setEditingRecipeId(recipe.id);
+    setRecipeForm({
+      name: recipe.name || '',
+      product: recipe.product || '',
+      ingredients: recipe.ingredients || [{ name: '', quantity: '', unit: '' }]
+    });
   };
 
   const handleAddBottlingMaterials = async (e) => {
     e.preventDefault();
     if (!user) return;
+    
+    const payload = {
+      name: bottlingMaterialsForm.name,
+      materials: bottlingMaterialsForm.materials.map(m => ({ ...m, quantity: parseFloat(m.quantity) || 0, unit: m.unit || '' }))
+    };
+
     try {
-      await setDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'bottlingMaterialDefinitions', bottlingMaterialsForm.name), {
-        materials: bottlingMaterialsForm.materials.map(m => ({ ...m, quantity: parseFloat(m.quantity) || 0 })),
-        name: bottlingMaterialsForm.name // Store name in doc as well
-      });
-      showNotification(`Material definition "${bottlingMaterialsForm.name}" saved!`);
-      setBottlingMaterialsForm({ name: '', materials: [{ name: '', quantity: '' }] });
+      if (editingProfileId) {
+        await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'bottlingMaterialDefinitions', editingProfileId), payload);
+        showNotification(`Material profile updated!`);
+        setEditingProfileId(null);
+      } else {
+        await setDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'bottlingMaterialDefinitions', payload.name), payload);
+        showNotification(`Material profile "${payload.name}" saved!`);
+      }
+      setBottlingMaterialsForm({ name: '', materials: [{ name: '', quantity: '', unit: '' }] });
     } catch (err) { 
       console.error("Material Save Error:", err);
       showNotification(`Error saving materials: ${err.message}`); 
     }
   };
+
+  const deleteProfileItem = async (id) => {
+    if (!user) return;
+    if (window.confirm("Are you sure you want to delete this profile?")) {
+      await deleteDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'bottlingMaterialDefinitions', id));
+      showNotification("Profile deleted.");
+    }
+  };
+
+  const startEditingProfile = (profile) => {
+    setEditingProfileId(profile.id);
+    setBottlingMaterialsForm({
+      name: profile.name || '',
+      materials: profile.materials || [{ name: '', quantity: '', unit: '' }]
+    });
+  };
+
 
   // --- LOG SUBMISSIONS & DEDUCTIONS ---
   const handleLogSubmit = async (e, type) => {
@@ -266,7 +366,9 @@ export default function App() {
             for (const ingredient of recipe.ingredients) {
               const invItem = inventory.find(i => i.name === ingredient.name);
               if (invItem) {
-                const newQuantity = (invItem.quantity || 0) - (parseFloat(ingredient.quantity) || 0);
+                // Apply unit conversion (e.g. recipe specifies 350g, inventory is stored in kg => deduct 0.35)
+                const deductionQty = convertQuantity(parseFloat(ingredient.quantity) || 0, ingredient.unit, invItem.unit);
+                const newQuantity = (invItem.quantity || 0) - deductionQty;
                 await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), {
                   quantity: newQuantity > 0 ? newQuantity : 0,
                 });
@@ -279,7 +381,8 @@ export default function App() {
             for (const mat of matDef.materials) {
               const invItem = inventory.find(item => item.name === mat.name && item.type === 'bottling_material');
               if (invItem) {
-                const deductionAmount = (parseFloat(mat.quantity) || 0) * formToSave.bottledAmount;
+                const deductionPerBottle = convertQuantity(parseFloat(mat.quantity) || 0, mat.unit, invItem.unit);
+                const deductionAmount = deductionPerBottle * formToSave.bottledAmount;
                 const newQuantity = (invItem.quantity || 0) - deductionAmount;
                 await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), {
                   quantity: newQuantity > 0 ? newQuantity : 0,
@@ -315,9 +418,10 @@ export default function App() {
             for (const ingredient of recipe.ingredients) {
               const invItem = inventory.find(i => i.name === ingredient.name);
               if (invItem) {
-                const restoredQuantity = (invItem.quantity || 0) + (parseFloat(ingredient.quantity) || 0);
+                const restoredQty = convertQuantity(parseFloat(ingredient.quantity) || 0, ingredient.unit, invItem.unit);
+                const newQuantity = (invItem.quantity || 0) + restoredQty;
                 await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), {
-                  quantity: restoredQuantity,
+                  quantity: newQuantity,
                 });
               }
             }
@@ -328,10 +432,11 @@ export default function App() {
             for (const mat of matDef.materials) {
               const invItem = inventory.find(item => item.name === mat.name && item.type === 'bottling_material');
               if (invItem) {
-                const deductionAmount = (parseFloat(mat.quantity) || 0) * (parseInt(log.bottledAmount, 10) || 0);
-                const restoredQuantity = (invItem.quantity || 0) + deductionAmount;
+                const deductionPerBottle = convertQuantity(parseFloat(mat.quantity) || 0, mat.unit, invItem.unit);
+                const deductionAmount = deductionPerBottle * (parseInt(log.bottledAmount, 10) || 0);
+                const newQuantity = (invItem.quantity || 0) + deductionAmount;
                 await updateDoc(doc(db, 'artifacts', 'distillation-app', 'users', user.uid, 'inventory', invItem.id), {
-                  quantity: restoredQuantity,
+                  quantity: newQuantity,
                 });
               }
             }
@@ -452,8 +557,8 @@ export default function App() {
             <form onSubmit={(e) => handleLogSubmit(e, 'distillation')} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Date & Time</label>
-                  <input type="datetime-local" value={distillationForm.date} onChange={e => setDistillationForm({...distillationForm, date: e.target.value})} className={inputField} required />
+                  <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Date</label>
+                  <input type="date" value={distillationForm.date} onChange={e => setDistillationForm({...distillationForm, date: e.target.value})} className={inputField} required />
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Recipe Used</label>
@@ -467,7 +572,7 @@ export default function App() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Start Time</label>
-                  <input type="time" value={distillationForm.distillationStart} onChange={e => setDistillationForm({...distillationForm, distillationStart: e.target.value})} className={inputField} required />
+                  <TimePicker value={distillationForm.distillationStart} onChange={val => setDistillationForm({...distillationForm, distillationStart: val})} required={true} />
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Power Level</label>
@@ -501,15 +606,15 @@ export default function App() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Heads Start</label>
-                  <input type="time" value={distillationForm.headsCollectionStart} onChange={e => setDistillationForm({...distillationForm, headsCollectionStart: e.target.value})} className={inputField} required />
+                  <TimePicker value={distillationForm.headsCollectionStart} onChange={val => setDistillationForm({...distillationForm, headsCollectionStart: val})} required={true} />
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Hearts Start</label>
-                  <input type="time" value={distillationForm.heartsCollectionStart} onChange={e => setDistillationForm({...distillationForm, heartsCollectionStart: e.target.value})} className={inputField} required />
+                  <TimePicker value={distillationForm.heartsCollectionStart} onChange={val => setDistillationForm({...distillationForm, heartsCollectionStart: val})} required={true} />
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Hearts Stop</label>
-                  <input type="time" value={distillationForm.heartsCollectionStop} onChange={e => setDistillationForm({...distillationForm, heartsCollectionStop: e.target.value})} className={inputField} required />
+                  <TimePicker value={distillationForm.heartsCollectionStop} onChange={val => setDistillationForm({...distillationForm, heartsCollectionStop: val})} required={true} />
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Tails Time (m)</label>
@@ -556,7 +661,7 @@ export default function App() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase mb-1 opacity-70 ml-1">Time</label>
-                  <input type="time" value={bottlingForm.bottlingStartTime} onChange={e => setBottlingForm({...bottlingForm, bottlingStartTime: e.target.value})} className={inputField} required />
+                  <TimePicker value={bottlingForm.bottlingStartTime} onChange={val => setBottlingForm({...bottlingForm, bottlingStartTime: val})} required={true} />
                 </div>
               </div>
 
@@ -608,7 +713,7 @@ export default function App() {
                     <tr key={item.id} className={tableRow}>
                       <td className="p-3 font-bold">{item.name}</td>
                       <td className="p-3 capitalize">{item.type.replace('_', ' ')}</td>
-                      <td className={`p-3 ${item.quantity <= item.lowStockThreshold ? 'text-red-700 font-black' : ''}`}>{item.quantity} {item.unit}</td>
+                      <td className={`p-3 ${item.quantity <= item.lowStockThreshold ? 'text-red-700 font-black' : ''}`}>{parseFloat(item.quantity).toFixed(2)} {item.unit}</td>
                       <td className="p-3 flex justify-center gap-3">
                         <button type="button" onClick={() => {setEditingInventoryId(item.id); setInventoryForm(item);}} className="p-2 text-blue-700 hover:bg-blue-100 rounded-lg"><Pencil size={18}/></button>
                         <button type="button" onClick={() => deleteInventoryItem(item.id)} className="p-2 text-red-700 hover:bg-red-100 rounded-lg"><Trash2 size={18}/></button>
@@ -632,9 +737,16 @@ export default function App() {
                 </select>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <input type="number" placeholder="Quantity" value={inventoryForm.quantity} onChange={e => setInventoryForm({...inventoryForm, quantity: e.target.value})} className={inputField} required />
-                <input type="text" placeholder="Unit (kg, L)" value={inventoryForm.unit} onChange={e => setInventoryForm({...inventoryForm, unit: e.target.value})} className={inputField} required />
-                <input type="number" placeholder="Alert Level" value={inventoryForm.lowStockThreshold} onChange={e => setInventoryForm({...inventoryForm, lowStockThreshold: e.target.value})} className={inputField} required />
+                <input type="number" step="0.01" placeholder="Quantity" value={inventoryForm.quantity} onChange={e => setInventoryForm({...inventoryForm, quantity: e.target.value})} className={inputField} required />
+                <select value={inventoryForm.unit} onChange={e => setInventoryForm({...inventoryForm, unit: e.target.value})} className={inputField} required>
+                  <option value="">Unit</option>
+                  <option value="kg">kg</option>
+                  <option value="g">g</option>
+                  <option value="L">L</option>
+                  <option value="ml">ml</option>
+                  <option value="units">units</option>
+                </select>
+                <input type="number" step="0.01" placeholder="Alert Level" value={inventoryForm.lowStockThreshold} onChange={e => setInventoryForm({...inventoryForm, lowStockThreshold: e.target.value})} className={inputField} required />
                 <input type="number" placeholder="Lead Days" value={inventoryForm.leadTimeDays} onChange={e => setInventoryForm({...inventoryForm, leadTimeDays: e.target.value})} className={inputField} required />
               </div>
               <div className="flex gap-2 pt-2">
@@ -653,27 +765,50 @@ export default function App() {
                 <h3 className="text-xl font-bold mb-4 flex items-center text-[#8A2A2B]"><NotebookPen size={20} className="mr-2"/> Recipe Builder</h3>
                 <div className="bg-white/40 rounded-xl p-4 mb-4 max-h-48 overflow-y-auto border border-[#B5AE9F]">
                   <h4 className="font-bold text-sm opacity-70 mb-2">Current Recipes</h4>
-                  {recipes.map(r => <div key={r.id} className="text-sm py-1 border-b border-[#B5AE9F]/50">{r.name}</div>)}
+                  {recipes.map(r => (
+                    <div key={r.id} className="flex justify-between items-center text-sm py-2 border-b border-[#B5AE9F]/50">
+                      <span>{r.name}</span>
+                      <div className="flex gap-3">
+                        <button type="button" onClick={() => startEditingRecipe(r)} className="text-blue-700 hover:text-blue-900"><Pencil size={16}/></button>
+                        <button type="button" onClick={() => deleteRecipeItem(r.id)} className="text-red-700 hover:text-red-900"><Trash2 size={16}/></button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
                 <form onSubmit={handleAddRecipe} className="space-y-4">
                   <input type="text" placeholder="Recipe Name" value={recipeForm.name} onChange={e => setRecipeForm({...recipeForm, name: e.target.value})} className={inputField} required />
                   <div className="bg-[#C8C2BA]/50 p-4 rounded-xl space-y-3">
                     <p className="font-bold text-sm">Ingredients:</p>
                     {recipeForm.ingredients.map((ing, i) => (
-                      <div key={i} className="flex gap-2">
+                      <div key={i} className="flex gap-2 items-center">
                         <select value={ing.name} onChange={e => { const n = [...recipeForm.ingredients]; n[i].name = e.target.value; setRecipeForm({...recipeForm, ingredients: n}); }} className={inputField} required>
                            <option value="">Select Ingredient...</option>
                            {inventory.filter(inv => inv.type === 'ingredient').map(inv => (
                              <option key={inv.id} value={inv.name}>{inv.name}</option>
                            ))}
                         </select>
-                        <input type="number" step="0.01" placeholder="Qty" value={ing.quantity} onChange={e => { const n = [...recipeForm.ingredients]; n[i].quantity = e.target.value; setRecipeForm({...recipeForm, ingredients: n}); }} className={`${inputField} w-24`} required />
-                        <button type="button" onClick={() => { const n = [...recipeForm.ingredients]; n.splice(i, 1); setRecipeForm({...recipeForm, ingredients: n}); }} className="text-red-700"><Trash2 size={20}/></button>
+                        <input type="number" step="0.01" placeholder="Qty" value={ing.quantity} onChange={e => { const n = [...recipeForm.ingredients]; n[i].quantity = e.target.value; setRecipeForm({...recipeForm, ingredients: n}); }} className={`${inputField} w-20`} required />
+                        <select value={ing.unit || ''} onChange={e => { const n = [...recipeForm.ingredients]; n[i].unit = e.target.value; setRecipeForm({...recipeForm, ingredients: n}); }} className={`${inputField} w-24`} required>
+                           <option value="">Unit</option>
+                           <option value="kg">kg</option>
+                           <option value="g">g</option>
+                           <option value="L">L</option>
+                           <option value="ml">ml</option>
+                           <option value="units">units</option>
+                        </select>
+                        <button type="button" onClick={() => { const n = [...recipeForm.ingredients]; n.splice(i, 1); setRecipeForm({...recipeForm, ingredients: n}); }} className="text-red-700 hover:text-red-900"><Trash2 size={20}/></button>
                       </div>
                     ))}
                     <button type="button" onClick={() => setRecipeForm({...recipeForm, ingredients: [...recipeForm.ingredients, {name:'', quantity:'', unit:''}]})} className="text-[#8A2A2B] text-sm font-bold">+ Add Ingredient</button>
                   </div>
-                  <button type="submit" className={button + " w-full text-sm"}>Save Recipe</button>
+                  <div className="flex gap-2">
+                    <button type="submit" className={button + " w-full text-sm"}>
+                      {editingRecipeId ? "Update Recipe" : "Save Recipe"}
+                    </button>
+                    {editingRecipeId && (
+                      <button type="button" onClick={() => {setEditingRecipeId(null); setRecipeForm({ name: '', product: '', ingredients: [{ name: '', quantity: '', unit: '' }] });}} className="bg-gray-500 text-white p-3 rounded-xl"><X size={20}/></button>
+                    )}
+                  </div>
                 </form>
               </div>
 
@@ -682,27 +817,50 @@ export default function App() {
                 <h3 className="text-xl font-bold mb-4 flex items-center text-[#8A2A2B]"><Plus size={20} className="mr-2"/> Bottling Profiles</h3>
                 <div className="bg-white/40 rounded-xl p-4 mb-4 max-h-48 overflow-y-auto border border-[#B5AE9F]">
                   <h4 className="font-bold text-sm opacity-70 mb-2">Saved Profiles</h4>
-                  {bottlingMaterialDefinitions.map(m => <div key={m.id} className="text-sm py-1 border-b border-[#B5AE9F]/50">{m.name}</div>)}
+                  {bottlingMaterialDefinitions.map(m => (
+                    <div key={m.id} className="flex justify-between items-center text-sm py-2 border-b border-[#B5AE9F]/50">
+                      <span>{m.name}</span>
+                      <div className="flex gap-3">
+                        <button type="button" onClick={() => startEditingProfile(m)} className="text-blue-700 hover:text-blue-900"><Pencil size={16}/></button>
+                        <button type="button" onClick={() => deleteProfileItem(m.id)} className="text-red-700 hover:text-red-900"><Trash2 size={16}/></button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
                 <form onSubmit={handleAddBottlingMaterials} className="space-y-4">
                   <input type="text" placeholder="Profile Name (e.g. Standard 750ml)" value={bottlingMaterialsForm.name} onChange={e => setBottlingMaterialsForm({...bottlingMaterialsForm, name: e.target.value})} className={inputField} required />
                   <div className="bg-[#C8C2BA]/50 p-4 rounded-xl space-y-3">
                     <p className="font-bold text-sm">Materials required per 1 unit:</p>
                     {bottlingMaterialsForm.materials.map((mat, i) => (
-                      <div key={i} className="flex gap-2">
+                      <div key={i} className="flex gap-2 items-center">
                         <select value={mat.name} onChange={e => { const n = [...bottlingMaterialsForm.materials]; n[i].name = e.target.value; setBottlingMaterialsForm({...bottlingMaterialsForm, materials: n}); }} className={inputField} required>
                            <option value="">Select Material...</option>
                            {inventory.filter(inv => inv.type === 'bottling_material').map(inv => (
                              <option key={inv.id} value={inv.name}>{inv.name}</option>
                            ))}
                         </select>
-                        <input type="number" step="0.01" placeholder="Qty" value={mat.quantity} onChange={e => { const n = [...bottlingMaterialsForm.materials]; n[i].quantity = e.target.value; setBottlingMaterialsForm({...bottlingMaterialsForm, materials: n}); }} className={`${inputField} w-24`} required />
-                        <button type="button" onClick={() => { const n = [...bottlingMaterialsForm.materials]; n.splice(i, 1); setBottlingMaterialsForm({...bottlingMaterialsForm, materials: n}); }} className="text-red-700"><Trash2 size={20}/></button>
+                        <input type="number" step="0.01" placeholder="Qty" value={mat.quantity} onChange={e => { const n = [...bottlingMaterialsForm.materials]; n[i].quantity = e.target.value; setBottlingMaterialsForm({...bottlingMaterialsForm, materials: n}); }} className={`${inputField} w-20`} required />
+                        <select value={mat.unit || ''} onChange={e => { const n = [...bottlingMaterialsForm.materials]; n[i].unit = e.target.value; setBottlingMaterialsForm({...bottlingMaterialsForm, materials: n}); }} className={`${inputField} w-24`} required>
+                           <option value="">Unit</option>
+                           <option value="kg">kg</option>
+                           <option value="g">g</option>
+                           <option value="L">L</option>
+                           <option value="ml">ml</option>
+                           <option value="units">units</option>
+                        </select>
+                        <button type="button" onClick={() => { const n = [...bottlingMaterialsForm.materials]; n.splice(i, 1); setBottlingMaterialsForm({...bottlingMaterialsForm, materials: n}); }} className="text-red-700 hover:text-red-900"><Trash2 size={20}/></button>
                       </div>
                     ))}
-                    <button type="button" onClick={() => setBottlingMaterialsForm({...bottlingMaterialsForm, materials: [...bottlingMaterialsForm.materials, {name:'', quantity:''}]})} className="text-[#8A2A2B] text-sm font-bold">+ Add Material</button>
+                    <button type="button" onClick={() => setBottlingMaterialsForm({...bottlingMaterialsForm, materials: [...bottlingMaterialsForm.materials, {name:'', quantity:'', unit:''}]})} className="text-[#8A2A2B] text-sm font-bold">+ Add Material</button>
                   </div>
-                  <button type="submit" className={button + " w-full text-sm"}>Save Profile</button>
+                  <div className="flex gap-2">
+                    <button type="submit" className={button + " w-full text-sm"}>
+                      {editingProfileId ? "Update Profile" : "Save Profile"}
+                    </button>
+                    {editingProfileId && (
+                      <button type="button" onClick={() => {setEditingProfileId(null); setBottlingMaterialsForm({ name: '', materials: [{ name: '', quantity: '', unit: '' }] });}} className="bg-gray-500 text-white p-3 rounded-xl"><X size={20}/></button>
+                    )}
+                  </div>
                 </form>
               </div>
 
